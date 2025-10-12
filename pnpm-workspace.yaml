@@ -12,5 +12,5 @@ catalogs:
     glob: ^11.0.3
     prettier: ^3.6.2
     rollup: ^4.46.2
-    typescript: ^5.9.2
+    typescript: ^5.9.3
     vitest: ^3.2.4
