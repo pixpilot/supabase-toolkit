@@ -1,7 +1,11 @@
 {
-  "name": "pnpm-turbo-monorepo-template",
+  "name": "supabase-toolkit",
   "private": true,
-  "packageManager": "pnpm@10.17.0",
+  "packageManager": "pnpm@10.18.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pixpilot/supabase-toolkit.git"
+  },
   "engines": {
     "node": ">=22.14.0",
     "pnpm": ">=9.6.0"
@@ -32,24 +36,24 @@
     "changeset": "changeset"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.6",
+    "@changesets/cli": "^2.29.7",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@internal/prettier-config": "workspace:*",
     "@pixpilot/dev-config": "catalog:dev",
-    "@pixpilot/workspace-package-generator": "^1.1.1",
-    "@turbo/gen": "^2.5.5",
+    "@pixpilot/workspace-package-generator": "^1.1.5",
+    "@turbo/gen": "^2.5.8",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
     "@vitest/ui": "catalog:dev",
     "eslint": "catalog:dev",
     "glob": "catalog:dev",
     "husky": "^9.1.7",
-    "lint-staged": "^16.1.5",
+    "lint-staged": "^16.2.4",
     "prettier": "catalog:dev",
     "rimraf": "^6.0.1",
-    "tsx": "^4.20.4",
-    "turbo": "^2.5.5",
+    "tsx": "^4.20.6",
+    "turbo": "^2.5.8",
     "typescript": "catalog:dev",
     "vitest": "catalog:dev"
   },

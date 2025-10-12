@@ -1,8 +1,8 @@
 {
-  "name": "example-package",
+  "name": "supabase-camel",
   "type": "module",
   "version": "0.0.0",
-  "packageManager": "pnpm@10.12.2",
+  "packageManager": "pnpm@10.18.2",
   "author": "",
   "license": "MIT",
   "keywords": [],
@@ -25,8 +25,7 @@
   },
   "scripts": {
     "prepublishOnly": "pnpm run clean && pnpm run build",
-    "clean": "git clean -xdf .cache .turbo dist",
-    "clean:all": "git clean -xdf .cache .turbo dist node_modules",
+    "clean": "rimraf dist",
     "build": "pnpm run clean && rollup -c",
     "test": "vitest",
     "test:watch": "vitest --watch",
@@ -36,14 +35,22 @@
     "lint": "eslint",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
+  "peerDependencies": {
+    "@supabase/supabase-js": "catalog:peer"
+  },
+  "dependencies": {
+    "@pixpilot/object": "catalog:prod"
+  },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
     "@internal/prettier-config": "workspace:*",
     "@internal/rollup-config": "workspace:*",
     "@internal/tsconfig": "workspace:*",
     "@internal/vitest-config": "workspace:*",
-    "@pixpilot/dev-config": "catalog:dev",
     "@types/node": "catalog:dev",
-    "rollup": "catalog:dev"
-  }
+    "eslint": "catalog:dev",
+    "rollup": "catalog:dev",
+    "typescript": "catalog:dev"
+  },
+  "prettier": "@internal/prettier-config"
 }

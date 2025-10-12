@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@pixpilot/dev-config": "catalog:dev",
-    "@pixpilot/eslint-config": "^2.7.3",
-    "typescript-eslint": "^8.40.0"
+    "@pixpilot/eslint-config": "^2.8.0",
+    "typescript-eslint": "^8.46.0"
   },
   "devDependencies": {
     "@internal/prettier-config": "workspace:*",
