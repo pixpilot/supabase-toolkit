@@ -1,4 +1,4 @@
-# supabase-storage
+# supabase-user-storage
 
 A user-scoped file storage manager for Supabase Storage. Automatically handles user authentication and scopes all operations to the authenticated user's folder.
 
@@ -13,7 +13,7 @@ A user-scoped file storage manager for Supabase Storage. Automatically handles u
 ## Installation
 
 ```bash
-pnpm add supabase-storage @supabase/supabase-js
+pnpm add supabase-user-storage @supabase/supabase-js
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ pnpm add supabase-storage @supabase/supabase-js
 
 ```typescript
 import { createClient } from '@supabase/supabase-js';
-import { UserStorageManager } from 'supabase-storage';
+import { UserStorageManager } from 'supabase-user-storage';
 
 const supabase = createClient('https://your-project.supabase.co', 'your-anon-key');
 
@@ -172,7 +172,7 @@ import {
   StorageError,
   UploadError,
   UrlError,
-} from 'supabase-storage';
+} from 'supabase-user-storage';
 
 try {
   await storage.uploadFile(file);
@@ -251,7 +251,23 @@ try {
 
 ## Path Handling
 
-All file paths are relative to the user's folder:
+All file paths are relative to the user's folder. The structure in Supabase storage looks like this:
+
+```
+bucket-name/
+├── user-id-1/
+│   ├── file.pdf
+│   └── documents/
+│       └── report.pdf
+├── user-id-2/
+│   ├── photo.jpg
+│   └── videos/
+│       └── clip.mp4
+└── user-id-3/
+    └── notes.txt
+```
+
+Each user only sees/accesses files within their own `user-id/` folder:
 
 ```typescript
 // User folder structure: userId/
@@ -280,7 +296,7 @@ import type {
   StorageManagerOptions,
   StorageUsageResult,
   UploadResult,
-} from 'supabase-storage';
+} from 'supabase-user-storage';
 ```
 
 ## License

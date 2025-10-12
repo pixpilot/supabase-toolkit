@@ -147,7 +147,7 @@ importers:
         specifier: catalog:dev
         version: 5.9.3
 
-  packages/supabase-storage:
+  packages/supabase-user-storage:
     dependencies:
       '@supabase/supabase-js':
         specifier: catalog:peer
