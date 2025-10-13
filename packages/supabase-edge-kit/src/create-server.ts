@@ -1,6 +1,6 @@
-import type { User } from 'npm:@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 
-import { z, ZodError } from 'npm:zod';
+import { z, ZodError } from 'zod';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,

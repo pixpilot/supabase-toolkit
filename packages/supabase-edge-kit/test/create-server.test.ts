@@ -1,7 +1,7 @@
-import type { SupabaseClient, User } from 'npm:@supabase/supabase-js';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 import type { MockedFunction } from 'vitest';
-import { z } from 'npm:zod';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { createServer } from '../src/create-server';
 import { createErrorResponse } from '../src/responses';
