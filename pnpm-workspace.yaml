@@ -15,6 +15,6 @@ catalogs:
     typescript: ^5.9.3
     vitest: ^3.2.4
   prod:
-    '@pixpilot/object': ^1.0.2
+    '@pixpilot/object': ^1.0.3
   peer:
     '@supabase/supabase-js': ^2.75.0
