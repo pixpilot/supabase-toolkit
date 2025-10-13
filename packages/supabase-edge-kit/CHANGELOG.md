@@ -1,5 +1,11 @@
 # supabase-edge-kit
 
+## 0.1.2
+
+### Patch Changes
+
+- update README and test files to use `users` instead of `jobs`
+
 ## 0.1.1
 
 ### Patch Changes
