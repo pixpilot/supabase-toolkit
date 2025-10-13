@@ -2,11 +2,11 @@
   "extends": "./tooling/typescript/base.json",
   "compilerOptions": {
     "baseUrl": ".",
-
+    "allowImportingTsExtensions": true,
     "allowJs": false,
     "checkJs": false,
     "strict": true,
-    "noEmit": false
+    "noEmit": true
   },
   "exclude": [
     "node_modules",

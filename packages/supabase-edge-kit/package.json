@@ -1,0 +1,63 @@
+{
+  "name": "supabase-edge-kit",
+  "type": "module",
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.17.0",
+  "description": "A lightweight, type-safe toolkit for building robust Supabase Edge Functions with built-in authentication, validation, error handling, and timeout protection",
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pixpilot/supabase-toolkit.git",
+    "directory": "packages/supabase-edge-kit"
+  },
+  "keywords": [],
+  "exports": "./src/index.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./deno": {
+        "types": "./dist/deno.d.ts"
+      }
+    },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "scripts": {
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "clean": "git clean -xdf .cache .turbo dist",
+    "clean:all": "git clean -xdf .cache .turbo dist node_modules",
+    "build": "pnpm run clean && rollup -c",
+    "test": "vitest --run --passWithNoTests",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
+  },
+  "devDependencies": {
+    "@internal/eslint-config": "workspace:*",
+    "@internal/prettier-config": "workspace:*",
+    "@internal/rollup-config": "workspace:*",
+    "@internal/tsconfig": "workspace:*",
+    "@internal/vitest-config": "workspace:*",
+    "@supabase/supabase-js": "catalog:peer",
+    "@types/node": "catalog:dev",
+    "eslint": "catalog:dev",
+    "rollup": "catalog:dev",
+    "rollup-plugin-copy": "^3.5.0",
+    "typescript": "catalog:dev",
+    "zod": "catalog:peer"
+  },
+  "prettier": "@internal/prettier-config"
+}
