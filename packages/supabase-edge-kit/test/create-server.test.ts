@@ -3,8 +3,8 @@ import type { MockedFunction } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { createErrorResponse } from '../src';
 import { createServer } from '../src/create-server';
+import { createErrorResponse } from '../src/responses';
 import {
   createSupabaseAdminClient,
   createSupabaseClient,
@@ -30,6 +30,10 @@ vi.mock('../src/utils', () => ({
   handleCors: vi.fn(),
   validateEnvironment: vi.fn(),
   validateMethod: vi.fn(),
+}));
+
+// Mock responses
+vi.mock('../src/responses', () => ({
   createErrorResponse: vi.fn(),
 }));
 
@@ -88,14 +92,15 @@ describe('createServer', () => {
       }),
     };
 
-    vi.mocked(createSupabaseClient).mockReturnValue(mockSupabaseClient);
-    vi.mocked(createSupabaseAdminClient).mockReturnValue(mockSupabaseAdminClient);
-    vi.mocked(getUser).mockResolvedValue(mockUser);
-    vi.mocked(validateEnvironment).mockReturnValue([]);
-    vi.mocked(validateMethod).mockReturnValue(true);
-    vi.mocked(handleCors).mockReturnValue(new Response('ok', { status: 200 }));
-    vi.mocked(createErrorResponse).mockImplementation(
-      (error, status = 400) => new Response(JSON.stringify({ error }), { status }),
+    // Use type casting instead of vi.mocked for inline mocks
+    (createSupabaseClient as any).mockReturnValue(mockSupabaseClient);
+    (createSupabaseAdminClient as any).mockReturnValue(mockSupabaseAdminClient);
+    (getUser as any).mockResolvedValue(mockUser);
+    (validateEnvironment as any).mockReturnValue([]);
+    (validateMethod as any).mockReturnValue(true);
+    (handleCors as any).mockReturnValue(new Response('ok', { status: 200 }));
+    (createErrorResponse as any).mockImplementation(
+      (error: any, status = 400) => new Response(JSON.stringify({ error }), { status }),
     );
   });
 
@@ -128,7 +133,7 @@ describe('createServer', () => {
   });
 
   it('should reject invalid HTTP methods', async () => {
-    vi.mocked(validateMethod).mockReturnValue(false);
+    (validateMethod as any).mockReturnValue(false);
 
     createServer(mockCallback);
 
@@ -140,7 +145,7 @@ describe('createServer', () => {
   });
 
   it('should validate environment variables', async () => {
-    vi.mocked(validateEnvironment).mockReturnValue(['MISSING_VAR']);
+    (validateEnvironment as any).mockReturnValue(['MISSING_VAR']);
 
     createServer(mockCallback);
 
@@ -171,7 +176,7 @@ describe('createServer', () => {
   });
 
   it('should handle authentication failure', async () => {
-    vi.mocked(getUser).mockResolvedValue(null);
+    (getUser as any).mockResolvedValue(null);
 
     createServer(mockCallback);
 
@@ -384,7 +389,7 @@ describe('createServer', () => {
   });
 
   it('should handle empty allowedMethods array', async () => {
-    vi.mocked(validateMethod).mockReturnValue(false);
+    (validateMethod as any).mockReturnValue(false);
 
     createServer(mockCallback, { allowedMethods: [] });
 
@@ -412,7 +417,7 @@ describe('createServer', () => {
   });
 
   it('should handle getUser throwing an error as server error', async () => {
-    vi.mocked(getUser).mockRejectedValue(new Error('Auth service error'));
+    (getUser as any).mockRejectedValue(new Error('Auth service error'));
 
     createServer(mockCallback);
 
@@ -434,7 +439,7 @@ describe('createServer', () => {
   });
 
   it('should handle multiple environment variables missing', async () => {
-    vi.mocked(validateEnvironment).mockReturnValue(['VAR1', 'VAR2', 'VAR3']);
+    (validateEnvironment as any).mockReturnValue(['VAR1', 'VAR2', 'VAR3']);
 
     createServer(mockCallback);
 
