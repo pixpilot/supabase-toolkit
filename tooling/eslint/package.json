@@ -4,7 +4,8 @@
   "version": "0.3.0",
   "private": true,
   "exports": {
-    "./base": "./base.js"
+    "./base": "./base.js",
+    "./deno-import-rule": "./deno-import-rule.js"
   },
   "scripts": {
     "clean:all": "git clean -xdf .cache .turbo node_modules",

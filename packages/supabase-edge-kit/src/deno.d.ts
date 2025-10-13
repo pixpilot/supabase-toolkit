@@ -59,3 +59,16 @@ declare namespace Deno {
     options?: Omit<ServeInit, 'port' | 'hostname'>,
   ): Promise<void>;
 }
+
+declare module 'npm:@supabase/supabase-js' {
+  export * from '@supabase/supabase-js';
+}
+
+declare module 'npm:zod' {
+  export * from 'zod';
+}
+
+// Extend the global scope to include Deno
+declare global {
+  const Deno: typeof Deno;
+}

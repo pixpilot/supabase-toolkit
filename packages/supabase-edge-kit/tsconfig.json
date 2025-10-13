@@ -1,6 +1,7 @@
 {
   "extends": "@internal/tsconfig/base.json",
   "compilerOptions": {
+    "types": ["vitest/globals", "./src/deno.d.ts"],
     "allowImportingTsExtensions": true,
     "noEmit": true
   },

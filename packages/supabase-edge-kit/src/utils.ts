@@ -1,6 +1,6 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { SupabaseClient, User } from 'npm:@supabase/supabase-js';
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from 'npm:@supabase/supabase-js';
 import { corsHeaders } from './types.ts';
 
 /**
