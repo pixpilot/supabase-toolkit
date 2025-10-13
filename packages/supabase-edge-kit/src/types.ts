@@ -38,7 +38,7 @@ export interface OpenRouterRequest {
 }
 
 export interface OpenRouterMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'users' | 'assistant';
   content: string;
 }
 

@@ -389,7 +389,7 @@ class CamelCaseDb<DB extends Record<string, any>> {
  * const db = createCamelCaseDb(supabase);
  *
  * // Use camelCase for database queries
- * const { data } = await db.from('jobs').select('*').eq('isActive', true);
+ * const { data } = await db.from('users').select('*').eq('isActive', true);
  *
  * // Use regular supabase for auth, storage, etc.
  * const { data: user } = await supabase.auth.getUser();

@@ -47,7 +47,7 @@ yarn add -D supabase-edge-kit
 import { createServer, createSuccessResponse } from 'supabase-edge-kit';
 
 createServer(async ({ user, supabaseClient }) => {
-  const { data } = await supabaseClient.from('jobs').select('*').eq('user_id', user!.id);
+  const { data } = await supabaseClient.from('users').select('*').eq('user_id', user!.id);
 
   return createSuccessResponse(data);
 });
@@ -58,11 +58,7 @@ createServer(async ({ user, supabaseClient }) => {
 ### With Input Validation
 
 ```typescript
-import {
-  createServer,
-  createSuccessResponse,
-  validateRequestBody,
-} from 'supabase-edge-kit';
+import { createServer, createSuccessResponse } from 'supabase-edge-kit';
 
 import { z } from 'zod';
 
@@ -76,17 +72,14 @@ const createJobSchema = z.object({
 createServer(async ({ request, user, supabaseClient }) => {
   const body = await request.json();
 
-  // Validate input - returns error response automatically if invalid
-  const validation = validateRequestBody(body, createJobSchema);
-  if (!validation.success) {
-    return validation.response;
-  }
+  // Validate input - the library automatically handles Zod validation errors
+  const validatedData = createJobSchema.parse(body);
 
-  // validation.data is fully typed!
+  // validatedData is fully typed!
   const { data } = await supabaseClient
-    .from('jobs')
+    .from('users')
     .insert({
-      ...validation.data,
+      ...validatedData,
       user_id: user!.id,
     })
     .select()
@@ -203,21 +196,20 @@ return createErrorResponse(
 ### Validation Helper
 
 ```typescript
-import { validateRequestBody } from 'supabase-edge-kit';
+import { createServer, createSuccessResponse } from 'supabase-edge-kit';
 import { z } from 'zod';
 
 const schema = z.object({ name: z.string() });
-const validation = validateRequestBody(body, schema);
 
-if (!validation.success) {
-  return validation.response; // Returns 400 with detailed errors
-}
+createServer(async ({ request }) => {
+  const body = await request.json();
 
-// validation.data is typed according to your schema
-const { name } = validation.data;
+  // The library automatically handles Zod validation errors
+  const { name } = schema.parse(body);
 
-// Always return a value at the end
-return createSuccessResponse({ name });
+  // Always return a value at the end
+  return createSuccessResponse({ name });
+});
 ```
 
 ## 📋 Common Patterns
@@ -225,26 +217,25 @@ return createSuccessResponse({ name });
 ### Pagination
 
 ```typescript
-import {
-  builtInSchemas,
-  createServer,
-  createSuccessResponse,
-  validateRequestBody,
-} from 'supabase-edge-kit';
+import { createServer, createSuccessResponse } from 'supabase-edge-kit';
+
+import { z } from 'zod';
+
+const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
 
 createServer(async ({ request, user, supabaseClient }) => {
   const url = new URL(request.url);
   const queryParams = Object.fromEntries(url.searchParams.entries());
 
-  // Validate pagination params (page, limit)
-  const validation = validateRequestBody(queryParams, builtInSchemas.paginationQuery);
-  if (!validation.success) return validation.response;
-
-  const { page, limit } = validation.data;
+  // Validate pagination params
+  const { page, limit } = paginationSchema.parse(queryParams);
   const offset = (page - 1) * limit;
 
   const { data, count } = await supabaseClient
-    .from('jobs')
+    .from('users')
     .select('*', { count: 'exact' })
     .eq('user_id', user!.id)
     .range(offset, offset + limit - 1);
@@ -298,7 +289,7 @@ createServer(
     if (request.method === 'GET') {
       // Handle GET - fetch data
       const { data } = await supabaseClient
-        .from('jobs')
+        .from('users')
         .select('*')
         .eq('user_id', user!.id);
       return createSuccessResponse(data);
@@ -308,7 +299,7 @@ createServer(
       // Handle POST - create data
       const body = await request.json();
       const { data } = await supabaseClient
-        .from('jobs')
+        .from('users')
         .insert({ ...body, user_id: user!.id })
         .select()
         .single();
@@ -370,7 +361,7 @@ import type { Database } from '../../database/types/database.ts';
 createServer<Database>(async ({ supabaseClient }) => {
   // Full TypeScript autocomplete for your tables!
   const { data } = await supabaseClient
-    .from('jobs') // Autocompleted from your database
+    .from('users') // Autocompleted from your database
     .select('*');
 
   return createSuccessResponse(data);
@@ -441,24 +432,19 @@ The framework automatically handles common errors:
 
 ## 📊 HTTP Status Codes
 
+```ts
 // Status codes
 import {
-HTTP_STATUS_BAD_REQUEST, // 400
-HTTP_STATUS_CREATED, // 201
-HTTP_STATUS_FORBIDDEN, // 403
-HTTP_STATUS_INTERNAL_SERVER_ERROR, // 500
-HTTP_STATUS_METHOD_NOT_ALLOWED, // 405
-HTTP_STATUS_NOT_FOUND, // 404
-HTTP_STATUS_OK, // 200
-HTTP_STATUS_REQUEST_TIMEOUT, // 408
-HTTP_STATUS_UNAUTHORIZED, // 401
+  HTTP_STATUS_BAD_REQUEST, // 400
+  HTTP_STATUS_CREATED, // 201
+  HTTP_STATUS_FORBIDDEN, // 403
+  HTTP_STATUS_INTERNAL_SERVER_ERROR, // 500
+  HTTP_STATUS_METHOD_NOT_ALLOWED, // 405
+  HTTP_STATUS_NOT_FOUND, // 404
+  HTTP_STATUS_OK, // 200
+  HTTP_STATUS_REQUEST_TIMEOUT, // 408
+  HTTP_STATUS_UNAUTHORIZED, // 401
 } from 'supabase-edge-kit';
-
-// Convenient response functions
-import { createBadRequestResponse, createNotFoundResponse } from 'supabase-edge-kit';
-
-return createBadRequestResponse('Invalid input'); // Instead of createErrorResponse('Invalid input', HTTP_STATUS_BAD_REQUEST)
-
 ```
 
 ## 🤝 Contributing

@@ -35,16 +35,19 @@ interface TestDatabase {
           user_id: string;
           user_name: string;
           email_address: string;
+          is_active: boolean;
         };
         Insert: {
           user_id?: string;
           user_name: string;
           email_address: string;
+          is_active?: boolean;
         };
         Update: {
           user_id?: string;
           user_name?: string;
           email_address?: string;
+          is_active?: boolean;
         };
       };
     };
@@ -58,11 +61,10 @@ function createMockTable() {
       Promise.resolve({
         data: [
           {
-            job_id: '123',
-            short_description: 'Test Job',
+            user_id: '123',
+            user_name: 'John Doe',
+            email_address: 'john@example.com',
             is_active: true,
-            created_at: '2024-01-01',
-            meta_data: { key: 'value' },
           },
         ],
         error: null,
@@ -75,11 +77,10 @@ function createMockTable() {
       Promise.resolve({
         data: [
           {
-            job_id: '456',
-            short_description: 'New Job',
+            user_id: '456',
+            user_name: 'Jane Doe',
+            email_address: 'jane@example.com',
             is_active: true,
-            created_at: '2024-01-02',
-            meta_data: {},
           },
         ],
         error: null,
@@ -92,11 +93,10 @@ function createMockTable() {
       Promise.resolve({
         data: [
           {
-            job_id: '789',
-            short_description: 'Upserted Job',
+            user_id: '789',
+            user_name: 'Bob Smith',
+            email_address: 'bob@example.com',
             is_active: false,
-            created_at: '2024-01-03',
-            meta_data: {},
           },
         ],
         error: null,
@@ -109,11 +109,10 @@ function createMockTable() {
       Promise.resolve({
         data: [
           {
-            job_id: '123',
-            short_description: 'Updated Job',
+            user_id: '123',
+            user_name: 'Updated User',
+            email_address: 'updated@example.com',
             is_active: false,
-            created_at: '2024-01-01',
-            meta_data: {},
           },
         ],
         error: null,
@@ -126,11 +125,10 @@ function createMockTable() {
       Promise.resolve({
         data: [
           {
-            job_id: '123',
-            short_description: 'Deleted Job',
+            user_id: '123',
+            user_name: 'Deleted User',
+            email_address: 'deleted@example.com',
             is_active: true,
-            created_at: '2024-01-01',
-            meta_data: {},
           },
         ],
         error: null,
@@ -250,24 +248,23 @@ describe('createCamelCaseDb', () => {
   describe('select queries', () => {
     it('should execute select query and convert keys to camelCase', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').select('*');
+      const result = await db.from('users').select('*');
 
-      expect(mockSupabaseClient.from).toHaveBeenCalledWith('jobs');
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('users');
       expect(mockTable.select).toHaveBeenCalledWith('*');
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Test Job',
+          userId: '123',
+          userName: 'John Doe',
+          emailAddress: 'john@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: { key: 'value' },
         },
       ]);
     });
 
     it('should execute select query without parameters', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').select();
+      const result = await db.from('users').select();
 
       expect(mockTable.select).toHaveBeenCalledWith(undefined);
       expect(result.data).toBeDefined();
@@ -285,117 +282,117 @@ describe('createCamelCaseDb', () => {
       );
 
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').select('*');
+      const result = await db.from('users').select('*');
 
       expect(result.data).toBe(null);
     });
 
     it('should support eq filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').eq('jobId', '123');
+      await db.from('users').select('*').eq('userId', '123');
 
-      expect(mockTable.eq).toHaveBeenCalledWith('job_id', '123');
+      expect(mockTable.eq).toHaveBeenCalledWith('user_id', '123');
     });
 
     it('should support neq filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').neq('isActive', false);
+      await db.from('users').select('*').neq('isActive', false);
 
       expect(mockTable.neq).toHaveBeenCalledWith('is_active', false);
     });
 
     it('should support gt filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').gt('jobId', '100');
+      await db.from('users').select('*').gt('userId', '100');
 
-      expect(mockTable.gt).toHaveBeenCalledWith('job_id', '100');
+      expect(mockTable.gt).toHaveBeenCalledWith('user_id', '100');
     });
 
     it('should support gte filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').gte('jobId', '100');
+      await db.from('users').select('*').gte('userId', '100');
 
-      expect(mockTable.gte).toHaveBeenCalledWith('job_id', '100');
+      expect(mockTable.gte).toHaveBeenCalledWith('user_id', '100');
     });
 
     it('should support lt filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').lt('jobId', '100');
+      await db.from('users').select('*').lt('userId', '100');
 
-      expect(mockTable.lt).toHaveBeenCalledWith('job_id', '100');
+      expect(mockTable.lt).toHaveBeenCalledWith('user_id', '100');
     });
 
     it('should support lte filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').lte('jobId', '100');
+      await db.from('users').select('*').lte('userId', '100');
 
-      expect(mockTable.lte).toHaveBeenCalledWith('job_id', '100');
+      expect(mockTable.lte).toHaveBeenCalledWith('user_id', '100');
     });
 
     it('should support like filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').like('shortDescription', '%test%');
+      await db.from('users').select('*').like('userName', '%John%');
 
-      expect(mockTable.like).toHaveBeenCalledWith('short_description', '%test%');
+      expect(mockTable.like).toHaveBeenCalledWith('user_name', '%John%');
     });
 
     it('should support ilike filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').ilike('shortDescription', '%TEST%');
+      await db.from('users').select('*').ilike('userName', '%JOHN%');
 
-      expect(mockTable.ilike).toHaveBeenCalledWith('short_description', '%TEST%');
+      expect(mockTable.ilike).toHaveBeenCalledWith('user_name', '%JOHN%');
     });
 
     it('should support is filter with null', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').is('metaData', null);
+      await db.from('users').select('*').is('emailAddress', null);
 
-      expect(mockTable.is).toHaveBeenCalledWith('meta_data', null);
+      expect(mockTable.is).toHaveBeenCalledWith('email_address', null);
     });
 
     it('should support is filter with boolean', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').is('isActive', true);
+      await db.from('users').select('*').is('isActive', true);
 
       expect(mockTable.is).toHaveBeenCalledWith('is_active', true);
     });
 
     it('should support in filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').in('jobId', ['123', '456']);
+      await db.from('users').select('*').in('userId', ['123', '456']);
 
-      expect(mockTable.in).toHaveBeenCalledWith('job_id', ['123', '456']);
+      expect(mockTable.in).toHaveBeenCalledWith('user_id', ['123', '456']);
     });
 
     it('should support contains filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').contains('metaData', { key: 'value' });
+      await db.from('users').select('*').contains('emailAddress', 'example.com');
 
-      expect(mockTable.contains).toHaveBeenCalledWith('meta_data', { key: 'value' });
+      expect(mockTable.contains).toHaveBeenCalledWith('email_address', 'example.com');
     });
 
     it('should support order without options', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').order('createdAt');
+      await db.from('users').select('*').order('userId');
 
-      expect(mockTable.order).toHaveBeenCalledWith('created_at', undefined);
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', undefined);
     });
 
     it('should support order with ascending option', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').order('createdAt', { ascending: false });
+      await db.from('users').select('*').order('userId', { ascending: false });
 
-      expect(mockTable.order).toHaveBeenCalledWith('created_at', { ascending: false });
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', { ascending: false });
     });
 
     it('should support order with nullsFirst option', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       await db
-        .from('jobs')
+        .from('users')
         .select('*')
-        .order('createdAt', { ascending: true, nullsFirst: true });
+        .order('userId', { ascending: true, nullsFirst: true });
 
-      expect(mockTable.order).toHaveBeenCalledWith('created_at', {
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', {
         ascending: true,
         nullsFirst: true,
       });
@@ -403,14 +400,14 @@ describe('createCamelCaseDb', () => {
 
     it('should support limit', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').limit(10);
+      await db.from('users').select('*').limit(10);
 
       expect(mockTable.limit).toHaveBeenCalledWith(10);
     });
 
     it('should support range', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').select('*').range(0, 9);
+      await db.from('users').select('*').range(0, 9);
 
       expect(mockTable.range).toHaveBeenCalledWith(0, 9);
     });
@@ -418,22 +415,22 @@ describe('createCamelCaseDb', () => {
     it('should support chained filters', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       await db
-        .from('jobs')
+        .from('users')
         .select('*')
         .eq('isActive', true)
-        .gte('jobId', '100')
-        .order('createdAt', { ascending: false })
+        .gte('userId', '100')
+        .order('userId', { ascending: false })
         .limit(5);
 
       expect(mockTable.eq).toHaveBeenCalledWith('is_active', true);
-      expect(mockTable.gte).toHaveBeenCalledWith('job_id', '100');
-      expect(mockTable.order).toHaveBeenCalledWith('created_at', { ascending: false });
+      expect(mockTable.gte).toHaveBeenCalledWith('user_id', '100');
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', { ascending: false });
       expect(mockTable.limit).toHaveBeenCalledWith(5);
     });
 
     it('should handle select with onfulfilled callback', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const query = db.from('jobs').select('*');
+      const query = db.from('users').select('*');
 
       const callback = vi.fn((result) => result.data);
       const result = await query.then(callback);
@@ -441,11 +438,10 @@ describe('createCamelCaseDb', () => {
       expect(callback).toHaveBeenCalled();
       expect(result).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Test Job',
+          userId: '123',
+          userName: 'John Doe',
+          emailAddress: 'john@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: { key: 'value' },
         },
       ]);
     });
@@ -454,36 +450,37 @@ describe('createCamelCaseDb', () => {
   describe('insert queries', () => {
     it('should insert single record and convert keys', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').insert({
-        shortDescription: 'New Job',
+      const result = await db.from('users').insert({
+        userName: 'Jane Doe',
+        emailAddress: 'jane@example.com',
         isActive: true,
       });
 
       expect(mockTable.insert).toHaveBeenCalledWith({
-        short_description: 'New Job',
+        user_name: 'Jane Doe',
+        email_address: 'jane@example.com',
         is_active: true,
       });
       expect(result.data).toEqual([
         {
-          jobId: '456',
-          shortDescription: 'New Job',
+          userId: '456',
+          userName: 'Jane Doe',
+          emailAddress: 'jane@example.com',
           isActive: true,
-          createdAt: '2024-01-02',
-          metaData: {},
         },
       ]);
     });
 
     it('should insert multiple records', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').insert([
-        { shortDescription: 'Job 1', isActive: true },
-        { shortDescription: 'Job 2', isActive: false },
+      const result = await db.from('users').insert([
+        { userName: 'User 1', emailAddress: 'user1@example.com', isActive: true },
+        { userName: 'User 2', emailAddress: 'user2@example.com', isActive: false },
       ]);
 
       expect(mockTable.insert).toHaveBeenCalledWith([
-        { short_description: 'Job 1', is_active: true },
-        { short_description: 'Job 2', is_active: false },
+        { user_name: 'User 1', email_address: 'user1@example.com', is_active: true },
+        { user_name: 'User 2', email_address: 'user2@example.com', is_active: false },
       ]);
       expect(result.data).toBeDefined();
     });
@@ -500,7 +497,9 @@ describe('createCamelCaseDb', () => {
       );
 
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').insert({ shortDescription: 'Test' });
+      const result = await db
+        .from('users')
+        .insert({ userName: 'Test', emailAddress: 'test@example.com' });
 
       expect(result.data).toBe(null);
     });
@@ -509,27 +508,28 @@ describe('createCamelCaseDb', () => {
   describe('upsert queries', () => {
     it('should upsert single record without options', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').upsert({
-        jobId: '789',
-        shortDescription: 'Upserted Job',
+      const result = await db.from('users').upsert({
+        userId: '789',
+        userName: 'Bob Smith',
+        emailAddress: 'bob@example.com',
         isActive: false,
       });
 
       expect(mockTable.upsert).toHaveBeenCalledWith(
         {
-          job_id: '789',
-          short_description: 'Upserted Job',
+          user_id: '789',
+          user_name: 'Bob Smith',
+          email_address: 'bob@example.com',
           is_active: false,
         },
         undefined,
       );
       expect(result.data).toEqual([
         {
-          jobId: '789',
-          shortDescription: 'Upserted Job',
+          userId: '789',
+          userName: 'Bob Smith',
+          emailAddress: 'bob@example.com',
           isActive: false,
-          createdAt: '2024-01-03',
-          metaData: {},
         },
       ]);
     });
@@ -537,48 +537,59 @@ describe('createCamelCaseDb', () => {
     it('should upsert with onConflict option', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       await db
-        .from('jobs')
-        .upsert({ jobId: '789', shortDescription: 'Test' }, { onConflict: 'job_id' });
+        .from('users')
+        .upsert(
+          { userId: '789', userName: 'Test', emailAddress: 'test@example.com' },
+          { onConflict: 'user_id' },
+        );
 
       expect(mockTable.upsert).toHaveBeenCalledWith(
-        { job_id: '789', short_description: 'Test' },
-        { onConflict: 'job_id' },
+        { user_id: '789', user_name: 'Test', email_address: 'test@example.com' },
+        { onConflict: 'user_id' },
       );
     });
 
     it('should upsert with ignoreDuplicates option', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       await db
-        .from('jobs')
-        .upsert({ shortDescription: 'Test' }, { ignoreDuplicates: true });
+        .from('users')
+        .upsert(
+          { userName: 'Test', emailAddress: 'test@example.com' },
+          { ignoreDuplicates: true },
+        );
 
       expect(mockTable.upsert).toHaveBeenCalledWith(
-        { short_description: 'Test' },
+        { user_name: 'Test', email_address: 'test@example.com' },
         { ignoreDuplicates: true },
       );
     });
 
     it('should upsert with count option', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').upsert({ shortDescription: 'Test' }, { count: 'exact' });
+      await db
+        .from('users')
+        .upsert(
+          { userName: 'Test', emailAddress: 'test@example.com' },
+          { count: 'exact' },
+        );
 
       expect(mockTable.upsert).toHaveBeenCalledWith(
-        { short_description: 'Test' },
+        { user_name: 'Test', email_address: 'test@example.com' },
         { count: 'exact' },
       );
     });
 
     it('should upsert multiple records', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      await db.from('jobs').upsert([
-        { jobId: '1', shortDescription: 'Job 1' },
-        { jobId: '2', shortDescription: 'Job 2' },
+      await db.from('users').upsert([
+        { userId: '1', userName: 'User 1', emailAddress: 'user1@example.com' },
+        { userId: '2', userName: 'User 2', emailAddress: 'user2@example.com' },
       ]);
 
       expect(mockTable.upsert).toHaveBeenCalledWith(
         [
-          { job_id: '1', short_description: 'Job 1' },
-          { job_id: '2', short_description: 'Job 2' },
+          { user_id: '1', user_name: 'User 1', email_address: 'user1@example.com' },
+          { user_id: '2', user_name: 'User 2', email_address: 'user2@example.com' },
         ],
         undefined,
       );
@@ -596,7 +607,9 @@ describe('createCamelCaseDb', () => {
       );
 
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').upsert({ shortDescription: 'Test' });
+      const result = await db
+        .from('users')
+        .upsert({ userName: 'Test', emailAddress: 'test@example.com' });
 
       expect(result.data).toBe(null);
     });
@@ -606,22 +619,26 @@ describe('createCamelCaseDb', () => {
     it('should update with eq filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db
-        .from('jobs')
-        .update({ shortDescription: 'Updated Job', isActive: false })
-        .eq('jobId', '123');
+        .from('users')
+        .update({
+          userName: 'Updated User',
+          emailAddress: 'updated@example.com',
+          isActive: false,
+        })
+        .eq('userId', '123');
 
       expect(mockTable.update).toHaveBeenCalledWith({
-        short_description: 'Updated Job',
+        user_name: 'Updated User',
+        email_address: 'updated@example.com',
         is_active: false,
       });
-      expect(mockTable.eq).toHaveBeenCalledWith('job_id', '123');
+      expect(mockTable.eq).toHaveBeenCalledWith('user_id', '123');
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Updated Job',
+          userId: '123',
+          userName: 'Updated User',
+          emailAddress: 'updated@example.com',
           isActive: false,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });
@@ -664,11 +681,10 @@ describe('createCamelCaseDb', () => {
       expect(callback).toHaveBeenCalled();
       expect(result).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Updated Job',
+          userId: '123',
+          userName: 'Updated User',
+          emailAddress: 'updated@example.com',
           isActive: false,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });
@@ -677,17 +693,16 @@ describe('createCamelCaseDb', () => {
   describe('delete queries', () => {
     it('should delete with eq filter', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').delete().eq('jobId', '123');
+      const result = await db.from('users').delete().eq('userId', '123');
 
       expect(mockTable.delete).toHaveBeenCalled();
-      expect(mockTable.eq).toHaveBeenCalledWith('job_id', '123');
+      expect(mockTable.eq).toHaveBeenCalledWith('user_id', '123');
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Deleted Job',
+          userId: '123',
+          userName: 'Deleted User',
+          emailAddress: 'deleted@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });
@@ -704,14 +719,14 @@ describe('createCamelCaseDb', () => {
       );
 
       const db = createCamelCaseDb(mockSupabaseClient);
-      const result = await db.from('jobs').delete().eq('jobId', '999');
+      const result = await db.from('users').delete().eq('userId', '999');
 
       expect(result.data).toBe(null);
     });
 
     it('should handle delete with onfulfilled callback', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const query = db.from('jobs').delete().eq('jobId', '123');
+      const query = db.from('users').delete().eq('userId', '123');
 
       const callback = vi.fn((result) => result.data);
       const result = await query.then(callback);
@@ -719,11 +734,10 @@ describe('createCamelCaseDb', () => {
       expect(callback).toHaveBeenCalled();
       expect(result).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Deleted Job',
+          userId: '123',
+          userName: 'Deleted User',
+          emailAddress: 'deleted@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });
@@ -732,51 +746,48 @@ describe('createCamelCaseDb', () => {
   describe('promise rejection handling', () => {
     it('should handle select with null onfulfilled callback', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const query = db.from('jobs').select('*');
+      const query = db.from('users').select('*');
 
       const result = await query.then(null, null);
 
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Test Job',
+          userId: '123',
+          userName: 'John Doe',
+          emailAddress: 'john@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: { key: 'value' },
         },
       ]);
     });
 
     it('should handle update with null onfulfilled callback', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const query = db.from('jobs').update({ isActive: false }).eq('jobId', '123');
+      const query = db.from('users').update({ isActive: false }).eq('userId', '123');
 
       const result = await query.then(null, null);
 
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Updated Job',
+          userId: '123',
+          userName: 'Updated User',
+          emailAddress: 'updated@example.com',
           isActive: false,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });
 
     it('should handle delete with null onfulfilled callback', async () => {
       const db = createCamelCaseDb(mockSupabaseClient);
-      const query = db.from('jobs').delete().eq('jobId', '123');
+      const query = db.from('users').delete().eq('userId', '123');
 
       const result = await query.then(null, null);
 
       expect(result.data).toEqual([
         {
-          jobId: '123',
-          shortDescription: 'Deleted Job',
+          userId: '123',
+          userName: 'Deleted User',
+          emailAddress: 'deleted@example.com',
           isActive: true,
-          createdAt: '2024-01-01',
-          metaData: {},
         },
       ]);
     });

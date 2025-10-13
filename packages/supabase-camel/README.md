@@ -1,6 +1,6 @@
-# supabase-camel# supabase-camel
+# supabase-camel
 
-TypeScript utilities for Supabase with automatic camelCase/snake_case conversion. Keep your code camelCase while your database stays snake_case.## Usage Add usage instructions here.
+TypeScript utilities for Supabase with automatic camelCase/snake_case conversion. Keep your code camelCase while your database stays snake_case.
 
 ## Installation
 
@@ -25,11 +25,13 @@ const supabase = createClient<Database>(
 const db = createCamelCaseDb(supabase);
 
 // Use camelCase everywhere!
-const { data: jobs } = await db
-  .from('jobs')
+const { data: users } = await db
+  .from('users')
   .select('*')
   .eq('isActive', true)
   .order('createdAt', { ascending: false });
+
+// users is an array of user objects
 ```
 
 ## Usage Examples
@@ -38,49 +40,56 @@ const { data: jobs } = await db
 
 ```typescript
 // Simple select
-const { data } = await db.from('jobs').select('*');
+const { data: users } = await db.from('users').select('*');
 
 // With filters
-const { data: activeJobs } = await db
-  .from('jobs')
+const { data: activeUsers } = await db
+  .from('users')
   .select('*')
   .eq('isActive', true)
-  .like('title', '%Developer%')
+  .like('name', '%John%')
   .limit(10);
 ```
 
 ### Insert
 
 ```typescript
-const newJob = {
-  jobId: 'unique-id',
-  title: 'Senior Developer',
-  shortDescription: 'Great opportunity',
+const newUser = {
+  userId: 'unique-id',
+  name: 'John Doe',
+  email: 'john@example.com',
   isActive: true,
 };
 
-const { data } = await db.from('jobs').insert(newJob);
+const { data: insertedUsers } = await db.from('users').insert(newUser);
+// insertedUsers is an array containing the inserted user(s)
 ```
 
 ### Update
 
 ```typescript
-await db.from('jobs').update({ isActive: false }).eq('jobId', 'some-id');
+const { data: updatedUsers } = await db
+  .from('users')
+  .update({ isActive: false })
+  .eq('userId', 'some-id');
+// updatedUsers is an array of updated user(s)
 ```
 
 ### Delete
 
 ```typescript
-await db.from('jobs').delete().eq('jobId', 'some-id');
+const { data: deletedUsers } = await db.from('users').delete().eq('userId', 'some-id');
+// deletedUsers is an array of deleted user(s)
 ```
 
 ### Upsert
 
 ```typescript
-const { data } = await db.from('jobs').upsert([
-  { jobId: 'id-1', title: 'Job 1' },
-  { jobId: 'id-2', title: 'Job 2' },
+const { data: upsertedUsers } = await db.from('users').upsert([
+  { userId: 'id-1', name: 'User 1' },
+  { userId: 'id-2', name: 'User 2' },
 ]);
+// upsertedUsers is an array of upserted user(s)
 ```
 
 ## Type Safety
@@ -89,12 +98,12 @@ const { data } = await db.from('jobs').upsert([
 import type { CamelCaseInsert, CamelCaseRow } from 'supabase-camel';
 
 // Typed row data
-type Job = CamelCaseRow<Database, 'jobs'>;
+type User = CamelCaseRow<Database, 'users'>;
 
 // Typed insert data
-const newJob: CamelCaseInsert<Database, 'jobs'> = {
-  jobId: 'id',
-  title: 'Developer',
+const newUser: CamelCaseInsert<Database, 'users'> = {
+  userId: 'id',
+  name: 'John Doe',
   // TypeScript autocomplete works!
 };
 ```
@@ -105,7 +114,8 @@ Only database operations are wrapped. Use your regular Supabase client for every
 
 ```typescript
 // Database queries with camelCase
-const { data: jobs } = await db.from('jobs').select('*');
+const { data: users } = await db.from('users').select('*');
+// users is an array of user objects
 
 // Auth, storage, etc. - use original client
 const {
