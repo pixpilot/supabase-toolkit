@@ -1,5 +1,11 @@
 # supabase-edge-kit
 
+## 0.1.3
+
+### Patch Changes
+
+- update import paths to use 'npm:' prefix for Supabase and Zod
+
 ## 0.1.2
 
 ### Patch Changes
