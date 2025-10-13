@@ -57,6 +57,7 @@
     "rollup": "catalog:dev",
     "rollup-plugin-copy": "^3.5.0",
     "typescript": "catalog:dev",
+    "vitest": "catalog:dev",
     "zod": "catalog:peer"
   },
   "prettier": "@internal/prettier-config"
