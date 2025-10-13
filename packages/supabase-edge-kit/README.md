@@ -28,6 +28,16 @@ Add to your `deno.json` in your Supabase functions directory:
 }
 ```
 
+For type safety in your development environment (e.g., when using TypeScript in a Node.js project), you can also install the package:
+
+```bash
+npm install --save-dev supabase-edge-kit
+# or
+pnpm add -D supabase-edge-kit
+# or
+yarn add -D supabase-edge-kit
+```
+
 ## 🚀 Quick Start
 
 ### Basic Authenticated Function
@@ -462,4 +472,3 @@ MIT
 ---
 
 **Built with ❤️ for the Supabase community**
-```
