@@ -1,0 +1,44 @@
+{
+  "name": "@internal/deno-ver-test",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.0",
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pixpilot/supabase-toolkit.git",
+    "directory": "packages/deno-ver-test"
+  },
+  "keywords": [],
+  "exports": "./src/index.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "clean": "git clean -xdf .cache .turbo dist",
+    "clean:all": "git clean -xdf .cache .turbo dist node_modules",
+    "build": "pnpm run clean && rollup -c",
+    "test": "vitest --run --passWithNoTests",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
+  },
+  "devDependencies": {
+    "@internal/eslint-config": "workspace:*",
+    "@internal/prettier-config": "workspace:*",
+    "@internal/rollup-config": "workspace:*",
+    "@internal/tsconfig": "workspace:*",
+    "@internal/vitest-config": "workspace:*",
+    "@types/node": "catalog:dev",
+    "eslint": "catalog:dev",
+    "rollup": "catalog:dev",
+    "typescript": "catalog:dev"
+  },
+  "prettier": "@internal/prettier-config"
+}
