@@ -1,6 +1,6 @@
 {
   "name": "@pixpilot/supabase-edge-kit",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "license": "MIT",
   "exports": "./src/index.ts",
   "nodeModulesDir": "auto",
@@ -9,6 +9,6 @@
   },
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2",
-    "zod": "npm:zod@^4"
+    "zod": "npm:zod@^3"
   }
 }
