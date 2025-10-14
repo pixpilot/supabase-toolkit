@@ -221,6 +221,7 @@ describe('createServer', () => {
       {
         code: 'invalid_type',
         expected: 'string',
+        received: 'number',
         path: ['field'],
         message: 'Expected string, received number',
       },
