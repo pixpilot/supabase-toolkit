@@ -46,7 +46,7 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
   "dependencies": {
-    "zod": "catalog:peer"
+    "zod": "^3.1.1"
   },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
