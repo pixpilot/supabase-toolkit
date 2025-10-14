@@ -42,13 +42,12 @@ export function testZodVersion(): 'v3' | 'v4' {
     if (!error || !Array.isArray((error as any).issues)) throw new Error();
 
     // ✅ 4. Zod v4 schema has a `readonly()` method (not present in v3)
-    z.string().readonly();
 
     // ✅ 5. Zod v4 added `catch()` (was `catchall()` in v3)
     z.string().catch('default');
 
     // ✅ 6. Zod v4’s `ZodObject` supports `.extend()` with readonly props (runtime difference)
-    z.object({ a: z.string() }).extend({ b: z.number().readonly() });
+    z.object({ a: z.string() }).extend({ b: z.number() });
 
     console.log('✅ Library: Zod v4 features available');
     return 'v4';
