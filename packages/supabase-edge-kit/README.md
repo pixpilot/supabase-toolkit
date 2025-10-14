@@ -21,7 +21,7 @@ Add to your `deno.json` in your Supabase functions directory:
 ```json
 {
   "imports": {
-    "supabase-edge-kit": "npm:supabase-edge-kit@0.1.3",
+    "supabase-edge-kit": "npm:supabase-edge-kit@0.1.4",
     "zod": "npm:zod@4.1.11",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
   }
