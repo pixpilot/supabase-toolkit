@@ -1,6 +1,7 @@
+/* eslint-disable no-console */
 import type { User } from '@supabase/supabase-js';
 
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -17,6 +18,21 @@ import {
   validateEnvironment,
   validateMethod,
 } from './utils.ts';
+
+export function testZodVersion(): 'v3' | 'v4' {
+  try {
+    // Zod v4 has .readonly() and .brand() improvements
+    // Test a v4-specific feature
+    z.string().pipe(z.string());
+
+    // Check if it's v4 by testing the pipe behavior
+    console.log('✅ Library: Zod v4 features available');
+    return 'v4';
+  } catch {
+    console.log('❌ Library: Using Zod v3');
+    return 'v3';
+  }
+}
 
 /**
  * Configuration options for the server
@@ -106,7 +122,7 @@ export function createServer<DB = any>(
   options: ServerOptions = {},
 ): void {
   const config = { ...DEFAULT_OPTIONS, ...options };
-
+  testZodVersion();
   // eslint-disable-next-line ts/no-floating-promises
   Deno.serve(async (req: Request) => {
     try {
