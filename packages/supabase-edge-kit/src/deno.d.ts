@@ -73,7 +73,7 @@ declare global {
   const Deno: typeof Deno;
 }
 
-declare module 'jsr:@pixpilot/deno-ver-test@0.1.0' {
+declare module '@pixpilot/deno-ver-test' {
   const version: string;
   export { version };
 }

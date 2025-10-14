@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 
-import { version } from 'jsr:@pixpilot/deno-ver-test@0.1.0';
+import { version } from '@pixpilot/deno-ver-test';
 
 import { ZodError } from 'zod';
 import {
