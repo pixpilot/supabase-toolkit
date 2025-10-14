@@ -1,7 +1,8 @@
-/* eslint-disable no-console */
 import type { User } from '@supabase/supabase-js';
 
-import { z, ZodError } from 'zod';
+import { version } from 'jsr:@pixpilot/deno-ver-test@0.1.0';
+
+import { ZodError } from 'zod';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -18,40 +19,6 @@ import {
   validateEnvironment,
   validateMethod,
 } from './utils.ts';
-
-export function testZodVersion(): 'v3' | 'v4' {
-  try {
-    // ✅ 1. Zod v4 introduced `z.string().pipe()`
-    z.string().pipe(z.string());
-
-    // ✅ 2. Zod v4 introduced `z.uuidv4()` (alias for stricter UUIDs)
-    // eslint-disable-next-line ts/no-unsafe-call, ts/no-unsafe-member-access
-    (z as any).uuid();
-
-    // ✅ 3. Zod v4’s `ZodError` includes `.issues` array that always has a `message`
-
-    const error = (() => {
-      try {
-        z.string().parse(123);
-      } catch (e) {
-        return e;
-      }
-      return undefined;
-    })();
-    // eslint-disable-next-line ts/strict-boolean-expressions, ts/no-unsafe-member-access, unicorn/error-message
-    if (!error || !Array.isArray((error as any).issues)) throw new Error();
-
-    z.string().catch('default');
-
-    z.object({ a: z.string() }).extend({ b: z.number() });
-
-    console.log('✅ Library: Zod v4 features available');
-    return 'v4';
-  } catch {
-    console.log('❌ Library: Using Zod v3');
-    return 'v3';
-  }
-}
 
 /**
  * Configuration options for the server
@@ -141,7 +108,8 @@ export function createServer<DB = any>(
   options: ServerOptions = {},
 ): void {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  testZodVersion();
+  // eslint-disable-next-line no-console
+  console.log({ version });
   // eslint-disable-next-line ts/no-floating-promises
   Deno.serve(async (req: Request) => {
     try {

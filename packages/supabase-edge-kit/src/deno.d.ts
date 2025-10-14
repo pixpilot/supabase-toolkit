@@ -72,3 +72,8 @@ declare module 'npm:zod@^3' {
 declare global {
   const Deno: typeof Deno;
 }
+
+declare module 'jsr:@pixpilot/deno-ver-test@0.1.0' {
+  const version: string;
+  export { version };
+}
