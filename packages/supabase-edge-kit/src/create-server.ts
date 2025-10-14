@@ -26,7 +26,7 @@ export function testZodVersion(): 'v3' | 'v4' {
 
     // ✅ 2. Zod v4 introduced `z.uuidv4()` (alias for stricter UUIDs)
     // eslint-disable-next-line ts/no-unsafe-call, ts/no-unsafe-member-access
-    (z as any).uuidv4();
+    (z as any).uuid();
 
     // ✅ 3. Zod v4’s `ZodError` includes `.issues` array that always has a `message`
 
