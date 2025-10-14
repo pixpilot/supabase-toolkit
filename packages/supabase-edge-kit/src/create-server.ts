@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 
-import { z, ZodError } from 'zod';
+import { ZodError } from 'zod';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -194,12 +194,12 @@ async function processRequest<DB = any>(
   } catch (error) {
     // Handle Zod validation errors
     if (error instanceof ZodError) {
-      console.error('Validation error:', z.treeifyError(error));
+      console.error('Validation error:', error.format());
       return createErrorResponse(
         {
           message: 'Invalid data provided.',
           code: 'VALIDATION_ERROR',
-          details: z.treeifyError(error),
+          details: error.format(),
         },
         HTTP_STATUS_BAD_REQUEST,
       );

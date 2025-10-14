@@ -60,11 +60,11 @@ declare namespace Deno {
   ): Promise<void>;
 }
 
-declare module 'npm:@supabase/supabase-js' {
+declare module 'npm:@supabase/supabase-js@^2' {
   export * from '@supabase/supabase-js';
 }
 
-declare module 'npm:zod' {
+declare module 'npm:zod@^3' {
   export * from 'zod';
 }
 

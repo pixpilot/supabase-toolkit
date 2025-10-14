@@ -45,6 +45,9 @@
     "lint": "eslint",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
+  "dependencies": {
+    "zod": "catalog:peer"
+  },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
     "@internal/prettier-config": "workspace:*",
@@ -57,8 +60,7 @@
     "rollup": "catalog:dev",
     "rollup-plugin-copy": "^3.5.0",
     "typescript": "catalog:dev",
-    "vitest": "catalog:dev",
-    "zod": "catalog:peer"
+    "vitest": "catalog:dev"
   },
   "prettier": "@internal/prettier-config"
 }

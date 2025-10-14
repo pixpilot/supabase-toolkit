@@ -151,6 +151,10 @@ importers:
         version: 5.9.3
 
   packages/supabase-edge-kit:
+    dependencies:
+      zod:
+        specifier: catalog:peer
+        version: 4.1.12
     devDependencies:
       '@internal/eslint-config':
         specifier: workspace:*
@@ -188,9 +192,6 @@ importers:
       vitest:
         specifier: catalog:dev
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.10)(@vitest/ui@3.2.4)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
-      zod:
-        specifier: catalog:peer
-        version: 4.1.12
 
   packages/supabase-user-storage:
     dependencies:
