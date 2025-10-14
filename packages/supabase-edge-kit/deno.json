@@ -9,6 +9,6 @@
   },
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2",
-    "zod": "jsr:zod"
+    "zod": "npm:zod@^4"
   }
 }
