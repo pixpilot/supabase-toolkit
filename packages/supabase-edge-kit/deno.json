@@ -1,6 +1,6 @@
 {
   "name": "@pixpilot/supabase-edge-kit",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "license": "MIT",
   "exports": "./src/index.ts",
   "nodeModulesDir": "auto",
@@ -8,7 +8,6 @@
     "lib": ["deno.window"]
   },
   "imports": {
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2",
-    "zod": "npm:zod@^3"
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2"
   }
 }
