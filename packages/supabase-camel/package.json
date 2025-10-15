@@ -26,7 +26,7 @@
   "scripts": {
     "prepublishOnly": "pnpm run clean && pnpm run build",
     "clean": "rimraf dist",
-    "build": "pnpm run clean && rollup -c",
+    "build": "pnpm run clean && rollup --config rollup.config.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
@@ -47,9 +47,6 @@
     "@internal/rollup-config": "workspace:*",
     "@internal/tsconfig": "workspace:*",
     "@internal/vitest-config": "workspace:*",
-    "@rollup/plugin-node-resolve": "catalog:dev",
-    "@rollup/plugin-terser": "catalog:dev",
-    "@rollup/plugin-typescript": "catalog:dev",
     "@types/node": "catalog:dev",
     "eslint": "catalog:dev",
     "rollup": "catalog:dev",

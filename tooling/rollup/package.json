@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "private": true,
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
   },
   "scripts": {
     "clean:all": "git clean -xdf .cache .turbo node_modules",
@@ -12,13 +15,13 @@
     "lint": "eslint",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
+  "dependencies": {
+    "@pixpilot/rollup-config": "^0.2.0"
+  },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
     "@internal/tsconfig": "workspace:*",
     "@pixpilot/dev-config": "catalog:dev",
-    "@rollup/plugin-node-resolve": "catalog:dev",
-    "@rollup/plugin-terser": "catalog:dev",
-    "@rollup/plugin-typescript": "catalog:dev",
     "@types/node": "catalog:dev",
     "glob": "catalog:dev",
     "rollup": "catalog:dev",

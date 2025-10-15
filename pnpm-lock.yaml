@@ -9,15 +9,6 @@ catalogs:
     '@pixpilot/dev-config':
       specifier: ^3.1.2
       version: 3.1.2
-    '@rollup/plugin-node-resolve':
-      specifier: ^15.2.3
-      version: 15.3.1
-    '@rollup/plugin-terser':
-      specifier: ^0.4.4
-      version: 0.4.4
-    '@rollup/plugin-typescript':
-      specifier: ^12.1.4
-      version: 12.1.4
     '@types/node':
       specifier: ^22.18.10
       version: 22.18.10
@@ -173,15 +164,6 @@ importers:
       '@internal/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
-      '@rollup/plugin-node-resolve':
-        specifier: catalog:dev
-        version: 15.3.1(rollup@4.52.4)
-      '@rollup/plugin-terser':
-        specifier: catalog:dev
-        version: 0.4.4(rollup@4.52.4)
-      '@rollup/plugin-typescript':
-        specifier: catalog:dev
-        version: 12.1.4(rollup@4.52.4)(tslib@2.8.1)(typescript@5.9.3)
       '@types/node':
         specifier: catalog:dev
         version: 22.18.10
@@ -224,9 +206,6 @@ importers:
       rollup:
         specifier: catalog:dev
         version: 4.52.4
-      rollup-plugin-copy:
-        specifier: ^3.5.0
-        version: 3.5.0
       typescript:
         specifier: catalog:dev
         version: 5.9.3
@@ -299,6 +278,10 @@ importers:
   tooling/prettier: {}
 
   tooling/rollup:
+    dependencies:
+      '@pixpilot/rollup-config':
+        specifier: ^0.2.0
+        version: 0.2.0(rollup@4.52.4)(tslib@2.8.1)(typescript@5.9.3)
     devDependencies:
       '@internal/eslint-config':
         specifier: workspace:*
@@ -309,15 +292,6 @@ importers:
       '@pixpilot/dev-config':
         specifier: catalog:dev
         version: 3.1.2(prettier@3.6.2)(typescript@5.9.3)
-      '@rollup/plugin-node-resolve':
-        specifier: catalog:dev
-        version: 15.3.1(rollup@4.52.4)
-      '@rollup/plugin-terser':
-        specifier: catalog:dev
-        version: 0.4.4(rollup@4.52.4)
-      '@rollup/plugin-typescript':
-        specifier: catalog:dev
-        version: 12.1.4(rollup@4.52.4)(tslib@2.8.1)(typescript@5.9.3)
       '@types/node':
         specifier: catalog:dev
         version: 22.18.10
@@ -958,6 +932,11 @@ packages:
   '@pixpilot/object@1.0.2':
     resolution: {integrity: sha512-ujZiobGF66G+DBOOnbKP3rWtxI1J8fRNKWtLmvBeYDq6iaHCgsAWIgsxFYSDbv102eFeJiwlZ4cE+OFq2mZRLw==}
 
+  '@pixpilot/rollup-config@0.2.0':
+    resolution: {integrity: sha512-H5n8gWZWLGhyZ/L23X8DzTbxjHNtN/DEX40sJ20seMO3C38Z5BvxmkFdMk5gh6g2Eno3nlal32zJT0/DRR7c4w==}
+    peerDependencies:
+      rollup: '>=4.46.2'
+
   '@pixpilot/string@1.0.0':
     resolution: {integrity: sha512-339gK1ua43NphdJeEyMtY1uzltusazxfFGNMf8M1mgNR3kDkfZsZ55ZrrmRPJkozi9X/28kc/CUmd7war3gNYQ==}
 
@@ -975,8 +954,8 @@ packages:
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
-  '@rollup/plugin-node-resolve@15.3.1':
-    resolution: {integrity: sha512-tgg6b91pAybXHJQMAAwW9VuWBO6Thi+q7BCNARLwSqlmsHz0XYURtGvh/AuwSADXSI4h/2uHbs7s4FzlZDGSGA==}
+  '@rollup/plugin-node-resolve@16.0.3':
+    resolution: {integrity: sha512-lUYM3UBGuM93CnMPG1YocWu7X802BrNF3jW2zny5gQyLQgRFJhV1Sq0Zi74+dh/6NBx1DxFC4b4GXg9wUCG5Qg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       rollup: ^2.78.0||^3.0.0||^4.0.0
@@ -5052,6 +5031,17 @@ snapshots:
     dependencies:
       '@pixpilot/string': 1.0.0
 
+  '@pixpilot/rollup-config@0.2.0(rollup@4.52.4)(tslib@2.8.1)(typescript@5.9.3)':
+    dependencies:
+      '@rollup/plugin-node-resolve': 16.0.3(rollup@4.52.4)
+      '@rollup/plugin-terser': 0.4.4(rollup@4.52.4)
+      '@rollup/plugin-typescript': 12.1.4(rollup@4.52.4)(tslib@2.8.1)(typescript@5.9.3)
+      rollup: 4.52.4
+      rollup-plugin-copy: 3.5.0
+    transitivePeerDependencies:
+      - tslib
+      - typescript
+
   '@pixpilot/string@1.0.0':
     dependencies:
       change-case: 5.4.4
@@ -5069,7 +5059,7 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@rollup/plugin-node-resolve@15.3.1(rollup@4.52.4)':
+  '@rollup/plugin-node-resolve@16.0.3(rollup@4.52.4)':
     dependencies:
       '@rollup/pluginutils': 5.2.0(rollup@4.52.4)
       '@types/resolve': 1.20.2

@@ -1,3 +1,3 @@
 import rollupConfig from '@internal/rollup-config';
 
-export default rollupConfig({ bundleDependencies: true });
+export default rollupConfig({ bundleDependencies: true, minify: true });
