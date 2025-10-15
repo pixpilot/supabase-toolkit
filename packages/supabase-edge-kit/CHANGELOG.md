@@ -1,5 +1,15 @@
 # supabase-edge-kit
 
+## 0.3.0
+
+### Minor Changes
+
+- enhance Rollup configuration with new plugins and options
+
+### Patch Changes
+
+- 8ea9d52: test release
+
 ## 0.2.0
 
 ### Minor Changes
