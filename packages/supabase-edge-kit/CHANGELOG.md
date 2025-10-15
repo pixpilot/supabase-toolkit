@@ -1,5 +1,17 @@
 # supabase-edge-kit
 
+## 0.2.0
+
+### Minor Changes
+
+- restructure the create server function
+
+### Patch Changes
+
+- update Zod v4 feature checks
+- update Zod error handling and import paths
+- update import statements to include file extensions
+
 ## 0.1.4
 
 ### Patch Changes
