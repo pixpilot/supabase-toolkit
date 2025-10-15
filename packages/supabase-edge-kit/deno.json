@@ -6,10 +6,5 @@
   "nodeModulesDir": "auto",
   "compilerOptions": {
     "lib": ["deno.window"]
-  },
-  "imports": {
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2",
-    "zod": "npm:zod@^4",
-    "@pixpilot/deno-ver-test": "jsr:@pixpilot/deno-ver-test@0.1.0"
   }
 }

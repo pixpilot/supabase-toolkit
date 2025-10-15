@@ -1,8 +1,10 @@
 import type { User } from '@supabase/supabase-js';
 
-import { version } from '@pixpilot/deno-ver-test';
+import type { ServerCallback, ServerCallbackContext } from './types/server-callback.ts';
+import type { ServerOptions } from './types/server-options.ts';
 
-import { ZodError } from 'zod';
+import type { ResponseHeaders } from './types/types.ts';
+import { defaultResponseHeaders } from './constants.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -10,117 +12,96 @@ import {
   HTTP_STATUS_REQUEST_TIMEOUT,
   HTTP_STATUS_UNAUTHORIZED,
 } from './http-status.ts';
+import { createRespondHelpers } from './respond-factory.ts';
 import { createErrorResponse } from './responses.ts';
-import {
-  createSupabaseAdminClient,
-  createSupabaseClient,
-  getUser,
-  handleCors,
-  validateEnvironment,
-  validateMethod,
-} from './utils.ts';
+import { autoHandlePreflight, validateEnvironment, validateMethod } from './utils.ts';
 
 /**
- * Configuration options for the server
+ * Configuration type for the server with required properties except onError
  */
-export interface ServerOptions {
-  /**
-   * Whether to require user authentication (default: true)
-   */
-  authenticate?: boolean;
-  /**
-   * Allowed HTTP methods (default: ['POST'])
-   */
-  allowedMethods?: string[];
-  /**
-   * Required environment variables to validate
-   */
-  requiredEnvVars?: string[];
-  /**
-   * Request timeout in milliseconds (default: 15000)
-   */
-  timeoutMs?: number;
-  /**
-   * Whether to handle CORS automatically (default: true)
-   */
-  handleCors?: boolean;
-}
+type ServerConfig<TDatabase = any> = Required<Omit<ServerOptions<TDatabase>, 'onError'>> &
+  Pick<ServerOptions<TDatabase>, 'onError'>;
 
 /**
- * Data passed to the server callback function
+ * Default server options (excluding createClient which is required)
  */
-export interface ServerCallbackContext<DB = any> {
-  /**
-   * The incoming HTTP request
-   */
-  request: Request;
-  /**
-   * Authenticated user (if authentication is enabled)
-   */
-  user?: User;
-  /**
-   * Supabase client with user context
-   */
-  supabaseClient: ReturnType<typeof createSupabaseClient<DB>>;
-  /**
-   * Supabase admin client (bypasses RLS)
-   */
-  supabaseAdminClient: ReturnType<typeof createSupabaseAdminClient<DB>>;
-}
-
-/**
- * Server callback function type
- */
-export type ServerCallback<DB = any> = (
-  context: ServerCallbackContext<DB>,
-) => Promise<Response>;
-
-/**
- * Default server options
- */
-const DEFAULT_OPTIONS: Required<ServerOptions> = {
+const DEFAULT_OPTIONS: Omit<ServerOptions, 'createClient'> = {
   authenticate: true,
-  allowedMethods: ['POST'],
-  requiredEnvVars: ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'],
+  allowedMethods: ['POST'] as string[],
+  requiredEnvVars: [
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ] as string[],
   timeoutMs: 60000,
-  handleCors: true,
+  autoHandlePreflight: true,
+  headers: {},
 };
 
 /**
  * Creates a reusable Supabase Edge Function server with common functionality
+ * When authenticate is true (default), user is guaranteed to be defined
+ * The Database type is automatically inferred from the createClient function
  *
  * @param callback - The main logic function to execute
- * @param options - Configuration options for the server
+ * @param configurations - Configuration options for the server
  *
  * @example
  * ```typescript
- * import { createServer } from '../_shared/create-server.ts';
+ * import type { Database } from './database.types';
+ * import { createClient } from '@supabase/supabase-js';
+ * import { createServer } from 'supabase-edge-kit';
  *
+ * // Database type is inferred from createClient<Database>
  * createServer(async ({ request, user, supabaseClient }) => {
  *   const body = await request.json();
- *   // Your logic here
+ *   // user is guaranteed to be defined here
+ *   // supabaseClient is fully typed with Database type
  *   return createSuccessResponse({ message: 'Hello world' });
+ * }, {
+ *   createClient: (url, key, options) => createClient<Database>(url, key, options)
  * });
  * ```
  */
-export function createServer<DB = any>(
-  callback: ServerCallback<DB>,
-  options: ServerOptions = {},
+// Overload 1: Explicit Database type with authenticate: true (or default)
+export function createServer<TDatabase = any>(
+  callback: ServerCallback<TDatabase, true>,
+  configurations: ServerOptions<TDatabase> & { authenticate?: true },
+): void;
+
+// Overload 2: Explicit Database type with authenticate: false
+export function createServer<TDatabase = any>(
+  callback: ServerCallback<TDatabase, false>,
+  options: ServerOptions<TDatabase> & { authenticate: false },
+): void;
+
+// Implementation with automatic type inference
+export function createServer<TDatabase = any>(
+  callback: ServerCallback<TDatabase, any>,
+  options: ServerOptions<TDatabase>,
 ): void {
-  const config = { ...DEFAULT_OPTIONS, ...options };
-  // eslint-disable-next-line no-console
-  console.log({ version });
+  const config = { ...DEFAULT_OPTIONS, ...options } as ServerConfig<TDatabase>;
+  // Merge response headers - after merging with defaults, we have a complete ResponseHeaders object
+  config.headers = {
+    ...defaultResponseHeaders,
+    'Access-Control-Allow-Methods': [...config.allowedMethods, 'OPTIONS'].join(', '),
+    ...config.headers,
+  } as ResponseHeaders;
   // eslint-disable-next-line ts/no-floating-promises
   Deno.serve(async (req: Request) => {
     try {
       // Handle CORS preflight requests
-      if (config.handleCors && req.method === 'OPTIONS') {
-        return handleCors();
+      if (config.autoHandlePreflight && req.method === 'OPTIONS') {
+        return autoHandlePreflight(config.headers as ResponseHeaders);
       }
 
       // Validate HTTP method
       if (!validateMethod(req, config.allowedMethods)) {
-        return createErrorResponse('Method not allowed', HTTP_STATUS_METHOD_NOT_ALLOWED);
+        return createErrorResponse(
+          'Method not allowed',
+          HTTP_STATUS_METHOD_NOT_ALLOWED,
+          config.headers,
+        );
       }
 
       // Create timeout promise
@@ -133,7 +114,7 @@ export function createServer<DB = any>(
 
       // Race the main processing against the timeout
       const result = await Promise.race([
-        processRequest<DB>(req, callback, config),
+        processRequest<TDatabase>(req, callback, config),
         timeoutPromise,
       ]);
 
@@ -141,7 +122,11 @@ export function createServer<DB = any>(
     } catch (error) {
       // Handle timeout errors
       if (error instanceof Error && error.message.includes('Request timed out')) {
-        return createErrorResponse('Request timed out', HTTP_STATUS_REQUEST_TIMEOUT);
+        return createErrorResponse(
+          'Request timed out',
+          HTTP_STATUS_REQUEST_TIMEOUT,
+          config.headers,
+        );
       }
 
       // Handle other errors
@@ -149,6 +134,7 @@ export function createServer<DB = any>(
       return createErrorResponse(
         error instanceof Error ? error.message : 'Internal server error',
         HTTP_STATUS_INTERNAL_SERVER_ERROR,
+        config.headers,
       );
     }
   });
@@ -157,10 +143,10 @@ export function createServer<DB = any>(
 /**
  * Process the incoming request with all validations and setup
  */
-async function processRequest<DB = any>(
+async function processRequest<TDatabase = any, TAuthenticate extends boolean = true>(
   req: Request,
-  callback: ServerCallback<DB>,
-  config: Required<ServerOptions>,
+  callback: ServerCallback<TDatabase, TAuthenticate>,
+  config: ServerConfig<TDatabase>,
 ): Promise<Response> {
   // Validate required environment variables
   const missingEnvVars = validateEnvironment(config.requiredEnvVars);
@@ -168,49 +154,86 @@ async function processRequest<DB = any>(
     return createErrorResponse(
       `Missing required environment variables: ${missingEnvVars.join(', ')}`,
       HTTP_STATUS_INTERNAL_SERVER_ERROR,
+      config.headers,
     );
   }
 
-  // Create Supabase clients
-  const supabaseClient = createSupabaseClient<DB>(req);
-  const supabaseAdminClient = createSupabaseAdminClient<DB>();
+  // Create Supabase clients using injected createClient function
+  const supabaseClient = config.createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    {
+      global: {
+        headers: {
+          Authorization: req.headers.get('Authorization')!,
+        },
+      },
+    },
+  );
+
+  const supabaseAdminClient = config.createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  );
 
   // Handle authentication if required
   let user: User | undefined;
   if (config.authenticate) {
-    user = (await getUser(supabaseClient)) ?? undefined;
-    if (!user) {
-      return createErrorResponse('Unauthorized', HTTP_STATUS_UNAUTHORIZED);
+    try {
+      // Get user from the supabaseClient
+      const result = await supabaseClient.auth.getUser();
+      const fetchedUser = result.data.user;
+      if (result.error != null) throw result.error;
+      user = fetchedUser ?? undefined;
+      if (user == null) {
+        return createErrorResponse(
+          'Unauthorized',
+          HTTP_STATUS_UNAUTHORIZED,
+          config.headers,
+        );
+      }
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return createErrorResponse(
+        'Unauthorized',
+        HTTP_STATUS_UNAUTHORIZED,
+        config.headers,
+      );
     }
   }
 
-  // Create context and call the callback with enhanced error handling
-  const context: ServerCallbackContext<DB> = {
+  // Create respond helpers with context headers defaults
+  const respond = createRespondHelpers(config.headers);
+
+  // Create context and call the callback
+  const context = {
     request: req,
-    user: user!,
+    user,
     supabaseClient,
     supabaseAdminClient,
-  };
+    headers: config.headers,
+    respond,
+  } as ServerCallbackContext<TDatabase, TAuthenticate>;
 
   try {
     return await callback(context);
   } catch (error) {
-    // Handle Zod validation errors
-    if (error instanceof ZodError) {
-      console.error('Validation error:', error.format());
-      return createErrorResponse(
-        {
-          message: 'Invalid data provided.',
-          code: 'VALIDATION_ERROR',
-          details: error.format(),
-        },
-        HTTP_STATUS_BAD_REQUEST,
-      );
+    // Try custom error handler first if provided
+    if (config.onError != null) {
+      const customError = config.onError(error);
+      if (customError != null) {
+        return createErrorResponse(customError, HTTP_STATUS_BAD_REQUEST, config.headers);
+      }
     }
+
     // Handle JSON parsing errors
     if (error instanceof SyntaxError && error.message.includes('JSON')) {
       console.error('JSON parsing error:', error);
-      return createErrorResponse('Invalid JSON in request body', HTTP_STATUS_BAD_REQUEST);
+      return createErrorResponse(
+        'Invalid JSON in request body',
+        HTTP_STATUS_BAD_REQUEST,
+        config.headers,
+      );
     }
 
     // Re-throw other errors to be handled by the outer catch block

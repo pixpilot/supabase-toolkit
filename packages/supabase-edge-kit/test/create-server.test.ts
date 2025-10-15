@@ -1,18 +1,11 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { SupabaseClient, SupabaseClientOptions, User } from '@supabase/supabase-js';
 import type { MockedFunction } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 
+import { defaultResponseHeaders } from '../src/constants';
 import { createServer } from '../src/create-server';
-import { createErrorResponse } from '../src/responses';
-import {
-  createSupabaseAdminClient,
-  createSupabaseClient,
-  getUser,
-  handleCors,
-  validateEnvironment,
-  validateMethod,
-} from '../src/utils';
+import { createErrorResponse, createSuccessResponse } from '../src/responses';
+import { autoHandlePreflight, validateEnvironment, validateMethod } from '../src/utils';
 
 // Mock Deno
 vi.mock('deno', () => ({
@@ -24,10 +17,7 @@ vi.mock('deno', () => ({
 
 // Mock utils
 vi.mock('../src/utils', () => ({
-  createSupabaseClient: vi.fn(),
-  createSupabaseAdminClient: vi.fn(),
-  getUser: vi.fn(),
-  handleCors: vi.fn(),
+  autoHandlePreflight: vi.fn(),
   validateEnvironment: vi.fn(),
   validateMethod: vi.fn(),
 }));
@@ -35,6 +25,19 @@ vi.mock('../src/utils', () => ({
 // Mock responses
 vi.mock('../src/responses', () => ({
   createErrorResponse: vi.fn(),
+  createSuccessResponse: vi.fn(),
+  createOkResponse: vi.fn(),
+  createBadRequestResponse: vi.fn(),
+  createUnauthorizedResponse: vi.fn(),
+  createForbiddenResponse: vi.fn(),
+  createNotFoundResponse: vi.fn(),
+  createMethodNotAllowedResponse: vi.fn(),
+  createRequestTimeoutResponse: vi.fn(),
+  createConflictResponse: vi.fn(),
+  createUnprocessableEntityResponse: vi.fn(),
+  createTooManyRequestsResponse: vi.fn(),
+  createInternalServerErrorResponse: vi.fn(),
+  createServiceUnavailableResponse: vi.fn(),
 }));
 
 // Mock Supabase client
@@ -61,6 +64,7 @@ describe('createServer', () => {
   let mockRequest: Request;
   let mockResponse: Response;
   let mockCallback: MockedFunction<any>;
+  let mockCreateClient: MockedFunction<any>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,6 +77,17 @@ describe('createServer', () => {
     mockResponse = new Response('test response');
 
     mockCallback = vi.fn().mockResolvedValue(mockResponse);
+
+    // Mock createClient function
+    mockCreateClient = vi.fn(
+      (url: string, key: string, options?: SupabaseClientOptions<string>) => {
+        // Return user client or admin client based on the key
+        if (key === 'test-anon-key' || options != null) {
+          return mockSupabaseClient;
+        }
+        return mockSupabaseAdminClient;
+      },
+    );
 
     // Default mocks
     (globalThis as any).Deno = {
@@ -92,62 +107,107 @@ describe('createServer', () => {
       }),
     };
 
-    // Use type casting instead of vi.mocked for inline mocks
-    (createSupabaseClient as any).mockReturnValue(mockSupabaseClient);
-    (createSupabaseAdminClient as any).mockReturnValue(mockSupabaseAdminClient);
-    (getUser as any).mockResolvedValue(mockUser);
+    // Mock Supabase client methods
+    mockSupabaseClient.auth.getUser = vi.fn().mockResolvedValue({
+      data: { user: mockUser },
+      error: null,
+    });
+
     (validateEnvironment as any).mockReturnValue([]);
     (validateMethod as any).mockReturnValue(true);
-    (handleCors as any).mockReturnValue(new Response('ok', { status: 200 }));
+    (autoHandlePreflight as any).mockReturnValue(new Response('ok', { status: 200 }));
     (createErrorResponse as any).mockImplementation(
-      (error: any, status = 400) => new Response(JSON.stringify({ error }), { status }),
+      (error: any, status = 400, cors?: any) => {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(cors || {}),
+        };
+        return new Response(JSON.stringify({ error }), { status, headers });
+      },
+    );
+    (createSuccessResponse as any).mockImplementation(
+      (data: any, message?: string, status = 200, cors?: any) => {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(cors || {}),
+        };
+        return new Response(JSON.stringify({ data }), { status, headers });
+      },
     );
   });
 
   it('should create a server with default options', async () => {
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     expect((globalThis as any).Deno.serve).toHaveBeenCalledTimes(1);
     const handler = (globalThis as any).__testHandler;
 
     const _response = await handler(mockRequest);
     expect(_response).toBe(mockResponse);
-    expect(mockCallback).toHaveBeenCalledWith({
-      request: mockRequest,
-      user: mockUser,
-      supabaseClient: mockSupabaseClient,
-      supabaseAdminClient: mockSupabaseAdminClient,
-    });
+    expect(mockCallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: mockRequest,
+        user: mockUser,
+        supabaseClient: mockSupabaseClient,
+        supabaseAdminClient: mockSupabaseAdminClient,
+        headers: {
+          ...defaultResponseHeaders,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        },
+        respond: expect.objectContaining({
+          success: expect.any(Function),
+          error: expect.any(Function),
+          ok: expect.any(Function),
+          badRequest: expect.any(Function),
+          unauthorized: expect.any(Function),
+          forbidden: expect.any(Function),
+          notFound: expect.any(Function),
+          methodNotAllowed: expect.any(Function),
+          requestTimeout: expect.any(Function),
+          conflict: expect.any(Function),
+          unprocessableEntity: expect.any(Function),
+          tooManyRequests: expect.any(Function),
+          internalServerError: expect.any(Function),
+          serviceUnavailable: expect.any(Function),
+        }),
+      }),
+    );
   });
 
   it('should handle CORS preflight requests', async () => {
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const corsRequest = new Request('http://localhost/test', { method: 'OPTIONS' });
 
     const _response = await handler(corsRequest);
 
-    expect(handleCors).toHaveBeenCalled();
+    expect(autoHandlePreflight).toHaveBeenCalledWith({
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
     expect(_response.status).toBe(200);
   });
 
   it('should reject invalid HTTP methods', async () => {
     (validateMethod as any).mockReturnValue(false);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
     expect(validateMethod).toHaveBeenCalledWith(mockRequest, ['POST']);
-    expect(createErrorResponse).toHaveBeenCalledWith('Method not allowed', 405);
+    expect(createErrorResponse).toHaveBeenCalledWith('Method not allowed', 405, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should validate environment variables', async () => {
     (validateEnvironment as any).mockReturnValue(['MISSING_VAR']);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
@@ -160,39 +220,49 @@ describe('createServer', () => {
     expect(createErrorResponse).toHaveBeenCalledWith(
       'Missing required environment variables: MISSING_VAR',
       500,
+      {
+        ...defaultResponseHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
     );
   });
 
   it('should handle authentication when enabled', async () => {
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(getUser).toHaveBeenCalledWith(mockSupabaseClient);
+    expect(mockSupabaseClient.auth.getUser).toHaveBeenCalled();
     expect(mockCallback).toHaveBeenCalledWith(
       expect.objectContaining({ user: mockUser }),
     );
   });
 
   it('should handle authentication failure', async () => {
-    (getUser as any).mockResolvedValue(null);
+    mockSupabaseClient.auth.getUser = vi.fn().mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Unauthorized', 401);
+    expect(createErrorResponse).toHaveBeenCalledWith('Unauthorized', 401, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should skip authentication when disabled', async () => {
-    createServer(mockCallback, { authenticate: false });
+    createServer(mockCallback, { authenticate: false, createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(getUser).not.toHaveBeenCalled();
+    expect(mockSupabaseClient.auth.getUser).not.toHaveBeenCalled();
     expect(mockCallback).toHaveBeenCalledWith(
       expect.objectContaining({ user: undefined }),
     );
@@ -207,41 +277,16 @@ describe('createServer', () => {
       return mockResponse;
     });
 
-    createServer(mockCallback, { timeoutMs: 50 });
+    createServer(mockCallback, { createClient: mockCreateClient, timeoutMs: 50 });
 
     const handler = (globalThis as any).__testHandler;
 
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408);
-  });
-
-  it('should handle Zod validation errors in callback', async () => {
-    const zodError = new z.ZodError([
-      {
-        code: 'invalid_type',
-        expected: 'string',
-        received: 'number',
-        path: ['field'],
-        message: 'Expected string, received number',
-      },
-    ]);
-
-    mockCallback.mockRejectedValue(zodError);
-
-    createServer(mockCallback);
-
-    const handler = (globalThis as any).__testHandler;
-    const _response = await handler(mockRequest);
-
-    expect(createErrorResponse).toHaveBeenCalledWith(
-      {
-        message: 'Invalid data provided.',
-        code: 'VALIDATION_ERROR',
-        details: expect.any(Object),
-      },
-      400,
-    );
+    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should handle JSON parsing errors in callback', async () => {
@@ -249,12 +294,19 @@ describe('createServer', () => {
 
     mockCallback.mockRejectedValue(jsonError);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Invalid JSON in request body', 400);
+    expect(createErrorResponse).toHaveBeenCalledWith(
+      'Invalid JSON in request body',
+      400,
+      {
+        ...defaultResponseHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+    );
   });
 
   it('should handle general errors', async () => {
@@ -262,27 +314,36 @@ describe('createServer', () => {
 
     mockCallback.mockRejectedValue(generalError);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Something went wrong', 500);
+    expect(createErrorResponse).toHaveBeenCalledWith('Something went wrong', 500, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should handle non-Error exceptions', async () => {
     mockCallback.mockRejectedValue('string error');
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500);
+    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should support custom allowed methods', async () => {
-    createServer(mockCallback, { allowedMethods: ['GET', 'POST', 'PUT'] });
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      allowedMethods: ['GET', 'POST', 'PUT'],
+    });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
@@ -292,6 +353,7 @@ describe('createServer', () => {
 
   it('should support custom required environment variables', async () => {
     createServer(mockCallback, {
+      createClient: mockCreateClient,
       requiredEnvVars: ['CUSTOM_VAR'],
     });
 
@@ -302,7 +364,7 @@ describe('createServer', () => {
   });
 
   it('should support custom timeout', async () => {
-    createServer(mockCallback, { timeoutMs: 30000 });
+    createServer(mockCallback, { createClient: mockCreateClient, timeoutMs: 30000 });
 
     // Test that timeout is passed correctly by checking error message
     mockCallback.mockImplementation(async () => {
@@ -312,29 +374,35 @@ describe('createServer', () => {
       return mockResponse;
     });
 
-    createServer(mockCallback, { timeoutMs: 50 });
+    createServer(mockCallback, { createClient: mockCreateClient, timeoutMs: 50 });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408);
+    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should disable CORS handling when configured', async () => {
-    createServer(mockCallback, { handleCors: false });
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      autoHandlePreflight: false,
+    });
 
     const handler = (globalThis as any).__testHandler;
     const corsRequest = new Request('http://localhost/test', { method: 'OPTIONS' });
 
     const _response = await handler(corsRequest);
 
-    expect(handleCors).not.toHaveBeenCalled();
+    expect(autoHandlePreflight).not.toHaveBeenCalled();
     // Should proceed to method validation
     expect(validateMethod).toHaveBeenCalled();
   });
 
   it('should handle multiple requests concurrently', async () => {
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
 
@@ -354,17 +422,24 @@ describe('createServer', () => {
   });
 
   it('should pass correct context to callback', async () => {
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(mockCallback).toHaveBeenCalledWith({
-      request: mockRequest,
-      user: mockUser,
-      supabaseClient: mockSupabaseClient,
-      supabaseAdminClient: mockSupabaseAdminClient,
-    });
+    expect(mockCallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: mockRequest,
+        user: mockUser,
+        supabaseClient: mockSupabaseClient,
+        supabaseAdminClient: mockSupabaseAdminClient,
+        headers: {
+          ...defaultResponseHeaders,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        },
+        respond: expect.any(Object),
+      }),
+    );
   });
 
   it('should handle callback that throws synchronously', async () => {
@@ -372,16 +447,19 @@ describe('createServer', () => {
       throw new Error('Sync error');
     });
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Sync error', 500);
+    expect(createErrorResponse).toHaveBeenCalledWith('Sync error', 500, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should handle empty requiredEnvVars array', async () => {
-    createServer(mockCallback, { requiredEnvVars: [] });
+    createServer(mockCallback, { createClient: mockCreateClient, requiredEnvVars: [] });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
@@ -392,7 +470,7 @@ describe('createServer', () => {
   it('should handle empty allowedMethods array', async () => {
     (validateMethod as any).mockReturnValue(false);
 
-    createServer(mockCallback, { allowedMethods: [] });
+    createServer(mockCallback, { createClient: mockCreateClient, allowedMethods: [] });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
@@ -408,30 +486,39 @@ describe('createServer', () => {
       return mockResponse;
     });
 
-    createServer(mockCallback, { timeoutMs: 0 });
+    createServer(mockCallback, { createClient: mockCreateClient, timeoutMs: 0 });
 
     const handler = (globalThis as any).__testHandler;
 
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408);
+    expect(createErrorResponse).toHaveBeenCalledWith('Request timed out', 408, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
-  it('should handle getUser throwing an error as server error', async () => {
-    (getUser as any).mockRejectedValue(new Error('Auth service error'));
+  it('should handle getUser throwing an error as unauthorized', async () => {
+    // Mock auth.getUser to throw an error
+    mockSupabaseClient.auth.getUser = vi
+      .fn()
+      .mockRejectedValue(new Error('Auth service error'));
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Auth service error', 500);
+    expect(createErrorResponse).toHaveBeenCalledWith('Unauthorized', 401, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
   });
 
   it('should handle callback returning non-Response value', async () => {
     mockCallback.mockResolvedValue('not a response' as any);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const response = await handler(mockRequest);
@@ -442,7 +529,7 @@ describe('createServer', () => {
   it('should handle multiple environment variables missing', async () => {
     (validateEnvironment as any).mockReturnValue(['VAR1', 'VAR2', 'VAR3']);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
@@ -450,11 +537,15 @@ describe('createServer', () => {
     expect(createErrorResponse).toHaveBeenCalledWith(
       'Missing required environment variables: VAR1, VAR2, VAR3',
       500,
+      {
+        ...defaultResponseHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
     );
   });
 
   it('should handle all default options', async () => {
-    createServer(mockCallback, {});
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
@@ -465,13 +556,13 @@ describe('createServer', () => {
       'SUPABASE_SERVICE_ROLE_KEY',
     ]);
     expect(validateMethod).toHaveBeenCalledWith(mockRequest, ['POST']);
-    expect(getUser).toHaveBeenCalled();
   });
 
   it('should handle server creation with minimal config', async () => {
     createServer(mockCallback, {
+      createClient: mockCreateClient,
       authenticate: false,
-      handleCors: false,
+      autoHandlePreflight: false,
       allowedMethods: ['GET'],
       requiredEnvVars: [],
       timeoutMs: 1000,
@@ -480,7 +571,6 @@ describe('createServer', () => {
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(getUser).not.toHaveBeenCalled();
     expect(validateEnvironment).toHaveBeenCalledWith([]);
     expect(validateMethod).toHaveBeenCalledWith(mockRequest, ['GET']);
   });
@@ -488,7 +578,7 @@ describe('createServer', () => {
   it('should handle race condition between timeout and successful response', async () => {
     mockCallback.mockResolvedValue(mockResponse);
 
-    createServer(mockCallback, { timeoutMs: 1000 });
+    createServer(mockCallback, { createClient: mockCreateClient, timeoutMs: 1000 });
 
     const handler = (globalThis as any).__testHandler;
     const response = await handler(mockRequest);
@@ -500,7 +590,7 @@ describe('createServer', () => {
   it('should handle callback that resolves immediately', async () => {
     mockCallback.mockResolvedValue(mockResponse);
 
-    createServer(mockCallback);
+    createServer(mockCallback, { createClient: mockCreateClient });
 
     const handler = (globalThis as any).__testHandler;
     const response = await handler(mockRequest);
@@ -513,7 +603,10 @@ describe('createServer', () => {
     const putRequest = new Request('http://localhost/test', { method: 'PUT' });
     const deleteRequest = new Request('http://localhost/test', { method: 'DELETE' });
 
-    createServer(mockCallback, { allowedMethods: ['GET', 'PUT', 'DELETE'] });
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      allowedMethods: ['GET', 'PUT', 'DELETE'],
+    });
 
     const handler = (globalThis as any).__testHandler;
 
@@ -529,7 +622,10 @@ describe('createServer', () => {
   it('should handle PATCH method', async () => {
     const patchRequest = new Request('http://localhost/test', { method: 'PATCH' });
 
-    createServer(mockCallback, { allowedMethods: ['PATCH'] });
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      allowedMethods: ['PATCH'],
+    });
 
     const handler = (globalThis as any).__testHandler;
     await handler(patchRequest);
@@ -540,11 +636,171 @@ describe('createServer', () => {
   it('should handle HEAD method', async () => {
     const headRequest = new Request('http://localhost/test', { method: 'HEAD' });
 
-    createServer(mockCallback, { allowedMethods: ['HEAD'] });
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      allowedMethods: ['HEAD'],
+    });
 
     const handler = (globalThis as any).__testHandler;
     await handler(headRequest);
 
     expect(validateMethod).toHaveBeenCalledWith(headRequest, ['HEAD']);
+  });
+
+  it('should handle custom onError callback for validation errors', async () => {
+    const customError = new Error('Custom validation error');
+    (customError as any).isValidation = true;
+
+    mockCallback.mockRejectedValue(customError);
+
+    const onError = vi.fn((error: any) => {
+      if (error.isValidation) {
+        return {
+          message: 'Custom validation failed',
+          code: 'CUSTOM_VALIDATION_ERROR',
+          details: { field: 'test' },
+        };
+      }
+      return null;
+    });
+
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      onError,
+    });
+
+    const handler = (globalThis as any).__testHandler;
+    const _response = await handler(mockRequest);
+
+    expect(onError).toHaveBeenCalledWith(customError);
+    expect(createErrorResponse).toHaveBeenCalledWith(
+      {
+        message: 'Custom validation failed',
+        code: 'CUSTOM_VALIDATION_ERROR',
+        details: { field: 'test' },
+      },
+      400,
+      {
+        ...defaultResponseHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+    );
+  });
+
+  it('should fall back to default error handling when onError returns null', async () => {
+    const generalError = new Error('General error');
+    mockCallback.mockRejectedValue(generalError);
+
+    const onError = vi.fn(() => null);
+
+    createServer(mockCallback, {
+      createClient: mockCreateClient,
+      onError,
+    });
+
+    const handler = (globalThis as any).__testHandler;
+    const _response = await handler(mockRequest);
+
+    expect(onError).toHaveBeenCalledWith(generalError);
+    expect(createErrorResponse).toHaveBeenCalledWith('General error', 500, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
+  });
+
+  describe('respond helpers', () => {
+    it('should provide respond.success with default CORS', async () => {
+      const testData = { message: 'test' };
+      let capturedContext: any;
+
+      mockCallback.mockImplementation((context: any) => {
+        capturedContext = context;
+        return context.respond.success(testData, 'Success message');
+      });
+
+      createServer(mockCallback, { createClient: mockCreateClient });
+
+      const handler = (globalThis as any).__testHandler;
+      await handler(mockRequest);
+
+      expect(capturedContext.respond.success).toBeDefined();
+      const response = capturedContext.respond.success(testData, 'Success message');
+      expect(response).toBeInstanceOf(Response);
+    });
+
+    it('should provide respond.error with default CORS', async () => {
+      let capturedContext: any;
+
+      mockCallback.mockImplementation((context: any) => {
+        capturedContext = context;
+        return context.respond.error('Error message');
+      });
+
+      createServer(mockCallback, { createClient: mockCreateClient });
+
+      const handler = (globalThis as any).__testHandler;
+      await handler(mockRequest);
+
+      expect(capturedContext.respond.error).toBeDefined();
+      const response = capturedContext.respond.error('Error message');
+      expect(response).toBeInstanceOf(Response);
+    });
+
+    it('should allow CORS override in respond helpers', async () => {
+      const customCors = { 'Access-Control-Allow-Origin': 'https://custom.com' };
+      let capturedContext: any;
+
+      mockCallback.mockImplementation((context: any) => {
+        capturedContext = context;
+        return context.respond.success({ test: 'data' }, 'Success', 200, customCors);
+      });
+
+      createServer(mockCallback, { createClient: mockCreateClient });
+
+      const handler = (globalThis as any).__testHandler;
+      await handler(mockRequest);
+
+      const response = capturedContext.respond.success(
+        { test: 'data' },
+        'Success',
+        200,
+        customCors,
+      );
+      expect(response).toBeInstanceOf(Response);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://custom.com',
+      );
+    });
+
+    it('should provide all respond helper methods', async () => {
+      let capturedContext: any;
+
+      mockCallback.mockImplementation((context: any) => {
+        capturedContext = context;
+        return context.respond.success({ ok: true });
+      });
+
+      createServer(mockCallback, { createClient: mockCreateClient });
+
+      const handler = (globalThis as any).__testHandler;
+      await handler(mockRequest);
+
+      expect(capturedContext.respond).toMatchObject({
+        success: expect.any(Function),
+        error: expect.any(Function),
+        ok: expect.any(Function),
+        badRequest: expect.any(Function),
+        unauthorized: expect.any(Function),
+        forbidden: expect.any(Function),
+        notFound: expect.any(Function),
+        methodNotAllowed: expect.any(Function),
+        requestTimeout: expect.any(Function),
+        conflict: expect.any(Function),
+        unprocessableEntity: expect.any(Function),
+        tooManyRequests: expect.any(Function),
+        internalServerError: expect.any(Function),
+        serviceUnavailable: expect.any(Function),
+      });
+    });
   });
 });

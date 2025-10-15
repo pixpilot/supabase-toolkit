@@ -45,8 +45,8 @@
     "lint": "eslint",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
-  "dependencies": {
-    "zod": "^3.1.1"
+  "peerDependencies": {
+    "@supabase/supabase-js": "*"
   },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",

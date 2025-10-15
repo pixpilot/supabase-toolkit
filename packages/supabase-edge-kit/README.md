@@ -1,317 +1,285 @@
 # Supabase Edge Kit
 
-A lightweight, type-safe toolkit for building robust Supabase Edge Functions with built-in authentication, validation, error handling, and timeout protection.
+Type-safe toolkit for building Supabase Edge Functions with built-in authentication, error handling, and CORS support.
 
-## ✨ Features
+## Installation
 
-- 🔐 **Built-in Authentication** - User auth handling out of the box
-- ✅ **Automatic Validation** - Zod schema validation with detailed error messages
-- 🛡️ **Error Handling** - Automatic handling of JSON parsing, validation, and timeout errors
-- 📤 **Response Helpers** - Convenient functions for all HTTP status codes
-- 🌐 **CORS Support** - Automatic CORS handling for preflight requests
-- ⏱️ **Timeout Protection** - Configurable request timeouts (default: 60s)
-- 🔧 **Environment Validation** - Ensure required env vars are present
-- 📝 **TypeScript First** - Full type safety with custom database types
-- 🎯 **Minimal Boilerplate** - Focus on your business logic
-
-## 📦 Installation
-
-Add to your `deno.json` in your Supabase functions directory:
+Add to your `deno.json`:
 
 ```json
 {
   "imports": {
     "supabase-edge-kit": "npm:supabase-edge-kit@0.1.4",
-    "zod": "npm:zod@4.1.11",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
   }
 }
 ```
 
-For type safety in your development environment (e.g., when using TypeScript in a Node.js project), you can also install the package:
+## Quick Start
 
-```bash
-npm install --save-dev supabase-edge-kit
-# or
-pnpm add -D supabase-edge-kit
-# or
-yarn add -D supabase-edge-kit
-```
-
-## 🚀 Quick Start
-
-### Basic Authenticated Function
+### Authenticated Function
 
 ```typescript
-// functions/my-function/index.ts
-import { createServer, createSuccessResponse } from 'supabase-edge-kit';
-
-createServer(async ({ user, supabaseClient }) => {
-  const { data } = await supabaseClient.from('users').select('*').eq('user_id', user!.id);
-
-  return createSuccessResponse(data);
-});
-```
-
-**That's it!** You now have a fully functional Edge Function with authentication, CORS, error handling, and timeout protection.
-
-### With Input Validation
-
-```typescript
-import { createServer, createSuccessResponse } from 'supabase-edge-kit';
-
-import { z } from 'zod';
-
-const createJobSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  company: z.string().min(1, 'Company is required'),
-  location: z.string().optional(),
-  salary: z.number().positive().optional(),
-});
-
-createServer(async ({ request, user, supabaseClient }) => {
-  const body = await request.json();
-
-  // Validate input - the library automatically handles Zod validation errors
-  const validatedData = createJobSchema.parse(body);
-
-  // validatedData is fully typed!
-  const { data } = await supabaseClient
-    .from('users')
-    .insert({
-      ...validatedData,
-      user_id: user!.id,
-    })
-    .select()
-    .single();
-
-  return createSuccessResponse(data, 'Job created successfully');
-});
-```
-
-### Public Endpoint (No Authentication)
-
-```typescript
-// functions/health/index.ts
-import { createServer, createSuccessResponse } from 'supabase-edge-kit';
+import { createClient } from '@supabase/supabase-js';
+import { createServer } from 'supabase-edge-kit';
 
 createServer(
-  async () =>
-    createSuccessResponse({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-    }),
+  async ({ user, supabaseClient, respond }) => {
+    const { data } = await supabaseClient
+      .from('users')
+      .select('*')
+      .eq('user_id', user.id);
+
+    return respond.success(data);
+  },
   {
-    authenticate: false,
-    allowedMethods: ['GET'],
+    createClient: (url, key, options) => createClient(url, key, options),
   },
 );
 ```
 
-## 📖 API Reference
-
-### `createServer(callback, options?)`
-
-Creates a Supabase Edge Function with built-in functionality.
-
-#### Callback Context
+### Public Endpoint
 
 ```typescript
-interface ServerCallbackContext<DB> {
-  request: Request; // The incoming HTTP request
-  user?: User; // Authenticated user (if auth enabled)
-  supabaseClient: SupabaseClient<DB>; // User-scoped client (respects RLS)
-  supabaseAdminClient: SupabaseClient<DB>; // Admin client (bypasses RLS)
-}
+createServer(async ({ respond }) => respond.success({ status: 'healthy' }), {
+  createClient: (url, key, options) => createClient(url, key, options),
+  authenticate: false,
+  allowedMethods: ['GET'],
+});
 ```
 
-#### Options
+### With Input Validation
+
+```typescript
+import { z, ZodError } from 'zod';
+
+const schema = z.object({
+  title: z.string().min(1),
+  company: z.string().min(1),
+});
+
+createServer(
+  async ({ request, user, supabaseClient, respond }) => {
+    try {
+      const body = await request.json();
+      const validatedData = schema.parse(body);
+
+      const { data } = await supabaseClient
+        .from('jobs')
+        .insert({ ...validatedData, user_id: user.id })
+        .select()
+        .single();
+
+      return respond.success(data);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return respond.badRequest({
+          message: 'Validation failed',
+          details: error.format(),
+        });
+      }
+      throw error;
+    }
+  },
+  {
+    createClient: (url, key, options) => createClient(url, key, options),
+  },
+);
+```
+
+### With Database Types
+
+Generate types: `npx supabase gen types typescript --local > database.types.ts`
+
+```typescript
+import type { Database } from './database.types';
+import { createClient } from '@supabase/supabase-js';
+
+createServer(
+  async ({ user, supabaseClient, respond }) => {
+    // Fully typed queries
+    const { data } = await supabaseClient
+      .from('todos')
+      .select('*')
+      .eq('user_id', user.id);
+
+    return respond.success(data);
+  },
+  {
+    createClient: (url, key) => createClient<Database>(url, key),
+  },
+);
+```
+
+## API Reference
+
+### `createServer(callback, options)`
+
+**Options:**
 
 ```typescript
 interface ServerOptions {
-  authenticate?: boolean; // Require authentication (default: true)
-  allowedMethods?: string[]; // Allowed HTTP methods (default: ['POST'])
-  requiredEnvVars?: string[]; // Required environment variables
-  timeoutMs?: number; // Request timeout in ms (default: 60000)
-  handleCors?: boolean; // Auto-handle CORS (default: true)
+  authenticate?: boolean; // Default: true
+  allowedMethods?: string[]; // Default: ['POST']
+  timeoutMs?: number; // Default: 60000
+  autoHandlePreflight?: boolean; // Default: true
+  headers?: Partial<ResponseHeaders>; // Custom response headers
+  requiredEnvVars?: string[]; // Default: []
+  onError?: (error) => { message; code?; details? } | null;
+  createClient: (url, key, options?) => SupabaseClient; // Required
 }
 ```
 
-**Example:**
+**Context:**
 
 ```typescript
-createServer(callback, {
-  authenticate: false,
-  allowedMethods: ['GET', 'POST'],
-  timeoutMs: 30000,
-  requiredEnvVars: ['OPENAI_API_KEY', 'STRIPE_SECRET_KEY'],
-});
+interface ServerCallbackContext {
+  request: Request;
+  user: User; // Required if authenticate: true
+  supabaseClient: SupabaseClient;
+  supabaseAdminClient: SupabaseClient;
+  headers: ResponseHeaders; // Merged response headers (defaults + custom)
+  respond: {
+    // All response helpers with default headers
+    success: <T>(
+      data: T,
+      message?: string,
+      status?: number,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    error: (
+      error: string | ApiError,
+      status?: number,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    ok: <T>(data: T, message?: string, headers?: Partial<ResponseHeaders>) => Response;
+    badRequest: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    unauthorized: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    forbidden: (error: string | ApiError, headers?: Partial<ResponseHeaders>) => Response;
+    notFound: (error: string | ApiError, headers?: Partial<ResponseHeaders>) => Response;
+    methodNotAllowed: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    requestTimeout: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    conflict: (error: string | ApiError, headers?: Partial<ResponseHeaders>) => Response;
+    unprocessableEntity: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    tooManyRequests: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    internalServerError: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+    serviceUnavailable: (
+      error: string | ApiError,
+      headers?: Partial<ResponseHeaders>,
+    ) => Response;
+  };
+}
 ```
 
 ### Response Helpers
 
-```typescript
-import {
-  createBadRequestResponse,
-  createConflictResponse,
-  createErrorResponse,
-  createForbiddenResponse,
-  createInternalServerErrorResponse,
-  createMethodNotAllowedResponse,
-  createNotFoundResponse,
-  createOkResponse,
-  createRequestTimeoutResponse,
-  createServiceUnavailableResponse,
-  createSuccessResponse,
-  createTooManyRequestsResponse,
-  createUnauthorizedResponse,
-  createUnprocessableEntityResponse,
-} from 'supabase-edge-kit';
-
-// Success response
-return createSuccessResponse(data, 'Optional success message');
-return createOkResponse(data, 'Success message'); // Same as above
-
-// Error responses - convenient methods
-return createBadRequestResponse('Invalid input data');
-return createUnauthorizedResponse('Authentication required');
-return createForbiddenResponse('Insufficient permissions');
-return createNotFoundResponse('Resource not found');
-return createMethodNotAllowedResponse('Method not allowed');
-return createRequestTimeoutResponse('Request timed out');
-return createConflictResponse('Resource conflict');
-return createUnprocessableEntityResponse('Validation failed');
-return createTooManyRequestsResponse('Rate limit exceeded');
-return createInternalServerErrorResponse('Internal server error');
-return createServiceUnavailableResponse('Service temporarily unavailable');
-
-// Or use the generic functions with custom status
-return createErrorResponse('Custom error', HTTP_STATUS_BAD_REQUEST);
-return createErrorResponse(
-  { message: 'Not found', code: 'RESOURCE_NOT_FOUND' },
-  HTTP_STATUS_NOT_FOUND,
-);
-```
-
-### Validation Helper
+All response helpers are available via `context.respond.*` and automatically use the configured response headers. You can optionally override headers for specific responses:
 
 ```typescript
-import { createServer, createSuccessResponse } from 'supabase-edge-kit';
-import { z } from 'zod';
+// Uses default headers from server config
+return respond.success(data);
 
-const schema = z.object({ name: z.string() });
-
-createServer(async ({ request }) => {
-  const body = await request.json();
-
-  // The library automatically handles Zod validation errors
-  const { name } = schema.parse(body);
-
-  // Always return a value at the end
-  return createSuccessResponse({ name });
+// Override headers for this specific response
+const successStatus = 200;
+return respond.success(data, 'Custom message', successStatus, {
+  'Access-Control-Allow-Origin': 'https://custom-domain.com',
 });
 ```
 
-## 📋 Common Patterns
+**Available response helpers:**
 
-### Pagination
+- `respond.success(data, message?, status?, headers?)` - Success response (default: 200)
+- `respond.error(error, status?, headers?)` - Error response (default: 400)
+- `respond.ok(data, message?, headers?)` - OK response (200)
+- `respond.badRequest(error, headers?)` - Bad Request (400)
+- `respond.unauthorized(error, headers?)` - Unauthorized (401)
+- `respond.forbidden(error, headers?)` - Forbidden (403)
+- `respond.notFound(error, headers?)` - Not Found (404)
+- `respond.methodNotAllowed(error, headers?)` - Method Not Allowed (405)
+- `respond.requestTimeout(error, headers?)` - Request Timeout (408)
+- `respond.conflict(error, headers?)` - Conflict (409)
+- `respond.unprocessableEntity(error, headers?)` - Unprocessable Entity (422)
+- `respond.tooManyRequests(error, headers?)` - Too Many Requests (429)
+- `respond.internalServerError(error, headers?)` - Internal Server Error (500)
+- `respond.serviceUnavailable(error, headers?)` - Service Unavailable (503)
 
-```typescript
-import { createServer, createSuccessResponse } from 'supabase-edge-kit';
-
-import { z } from 'zod';
-
-const paginationSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(10),
-});
-
-createServer(async ({ request, user, supabaseClient }) => {
-  const url = new URL(request.url);
-  const queryParams = Object.fromEntries(url.searchParams.entries());
-
-  // Validate pagination params
-  const { page, limit } = paginationSchema.parse(queryParams);
-  const offset = (page - 1) * limit;
-
-  const { data, count } = await supabaseClient
-    .from('users')
-    .select('*', { count: 'exact' })
-    .eq('user_id', user!.id)
-    .range(offset, offset + limit - 1);
-
-  return createSuccessResponse({
-    data,
-    pagination: {
-      page,
-      limit,
-      total: count ?? 0,
-      totalPages: Math.ceil((count ?? 0) / limit),
-    },
-  });
-});
-```
-
-### Admin Operations
-
-```typescript
-import {
-  createErrorResponse,
-  createServer,
-  createSuccessResponse,
-  HTTP_STATUS_FORBIDDEN,
-} from 'supabase-edge-kit';
-
-createServer(async ({ user, supabaseClient, supabaseAdminClient }) => {
-  // Check if user has admin role
-  const { data: userRole } = await supabaseClient
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user!.id)
-    .single();
-
-  if (userRole?.role !== 'admin') {
-    return createForbiddenResponse('Insufficient permissions');
-  }
-
-  // Use admin client to bypass RLS for privileged operations
-  const { data } = await supabaseAdminClient.from('sensitive_data').select('*');
-
-  return createSuccessResponse(data);
-});
-```
+## Common Patterns
 
 ### Multiple HTTP Methods
 
 ```typescript
 createServer(
-  async ({ request, user, supabaseClient }) => {
+  async ({ request, user, supabaseClient, respond }) => {
     if (request.method === 'GET') {
-      // Handle GET - fetch data
       const { data } = await supabaseClient
         .from('users')
         .select('*')
-        .eq('user_id', user!.id);
-      return createSuccessResponse(data);
+        .eq('user_id', user.id);
+      return respond.success(data);
     }
 
     if (request.method === 'POST') {
-      // Handle POST - create data
       const body = await request.json();
       const { data } = await supabaseClient
         .from('users')
-        .insert({ ...body, user_id: user!.id })
+        .insert({ ...body, user_id: user.id })
         .select()
         .single();
-      return createSuccessResponse(data);
+      return respond.success(data);
     }
 
-    return createBadRequestResponse('Bad Request');
-
-    // Other methods rejected automatically
+    return respond.badRequest('Bad Request');
   },
   {
+    createClient: (url, key, options) => createClient(url, key, options),
     allowedMethods: ['GET', 'POST'],
+  },
+);
+```
+
+### Admin Operations
+
+```typescript
+createServer(
+  async ({ user, supabaseClient, supabaseAdminClient, respond }) => {
+    const { data: userRole } = await supabaseClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (userRole?.role !== 'admin') {
+      return respond.forbidden('Insufficient permissions');
+    }
+
+    // Use admin client to bypass RLS
+    const { data } = await supabaseAdminClient.from('sensitive_data').select('*');
+
+    return respond.success(data);
+  },
+  {
+    createClient: (url, key, options) => createClient(url, key, options),
   },
 );
 ```
@@ -320,141 +288,55 @@ createServer(
 
 ```typescript
 createServer(
-  async ({ request, user, supabaseClient }) => {
+  async ({ request, user, supabaseClient, respond }) => {
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
-      return createBadRequestResponse('No file provided');
+      return respond.badRequest('No file provided');
     }
 
-    // Upload to Supabase Storage
     const { data, error } = await supabaseClient.storage
       .from('uploads')
-      .upload(`${user!.id}/${file.name}`, file);
+      .upload(`${user.id}/${file.name}`, file);
 
     if (error) {
-      return createBadRequestResponse(error.message);
+      return respond.badRequest(error.message);
     }
 
-    return createSuccessResponse({ path: data.path });
+    return respond.success({ path: data.path });
   },
   {
+    createClient: (url, key, options) => createClient(url, key, options),
     allowedMethods: ['POST'],
   },
 );
 ```
 
-## 🎯 Advanced Usage
-
-### Custom Database Types
-
-Generate types from your database and use them for full type safety:
-
-```bash
-npx supabase gen types typescript --local > database/types/database.ts
-```
+### Custom Response Headers per Response
 
 ```typescript
-import type { Database } from '../../database/types/database.ts';
-
-createServer<Database>(async ({ supabaseClient }) => {
-  // Full TypeScript autocomplete for your tables!
-  const { data } = await supabaseClient
-    .from('users') // Autocompleted from your database
-    .select('*');
-
-  return createSuccessResponse(data);
-});
-```
-
-### Custom Timeout
-
-```typescript
-// For long-running operations (e.g., AI generation, video processing)
-createServer(callback, {
-  timeoutMs: 120000, // 2 minutes
-});
-```
-
-### Additional Environment Variables
-
-```typescript
-createServer(callback, {
-  requiredEnvVars: [
-    'SUPABASE_URL',
-    'SUPABASE_ANON_KEY',
-    'SUPABASE_SERVICE_ROLE_KEY',
-    'OPENAI_API_KEY', // Custom API key
-    'STRIPE_SECRET_KEY', // Payment provider
-  ],
-});
-```
-
-## 🛡️ Automatic Error Handling
-
-The framework automatically handles common errors:
-
-| Error Type         | Status Code | Description                                           |
-| ------------------ | ----------- | ----------------------------------------------------- |
-| JSON Parsing       | 400         | Invalid JSON in request body                          |
-| Zod Validation     | 400         | Schema validation failed (with detailed field errors) |
-| Authentication     | 401         | Missing or invalid auth token                         |
-| Method Not Allowed | 405         | HTTP method not in `allowedMethods`                   |
-| Timeout            | 408         | Request exceeded `timeoutMs`                          |
-| Internal Error     | 500         | Unhandled exceptions                                  |
-
-**Example Zod error response:**
-
-```json
-{
-  "error": {
-    "message": "Invalid data provided.",
-    "code": "VALIDATION_ERROR",
-    "details": {
-      "title": ["Required"],
-      "email": ["Invalid email address"]
+createServer(
+  async ({ respond }) => {
+    // Use default headers
+    if (someCondition) {
+      return respond.success({ data: 'default headers' });
     }
-  }
-}
+
+    // Override headers for specific response
+    return respond.success({ data: 'custom headers' }, 'Success', undefined, {
+      'Access-Control-Allow-Origin': 'https://specific-domain.com',
+    });
+  },
+  {
+    createClient: (url, key, options) => createClient(url, key, options),
+    headers: {
+      'Access-Control-Allow-Origin': 'https://default-domain.com',
+    },
+  },
+);
 ```
 
-## 💡 Best Practices
-
-1. **Always validate user input** - Use Zod schemas for type safety
-2. **Use appropriate timeouts** - Adjust based on function complexity
-3. **Leverage RLS** - Use `supabaseClient` by default, `supabaseAdminClient` only when necessary
-4. **Use convenient response functions** - Prefer `createBadRequestResponse()` over `createErrorResponse(error, HTTP_STATUS_BAD_REQUEST)`
-5. **Log strategically** - Log errors for debugging, but avoid exposing sensitive data
-6. **Handle edge cases** - Test with missing data, malformed input, and unauthorized access
-7. **Keep functions focused** - One function per logical operation
-8. **Use TypeScript** - Generate database types for full type safety
-
-## 📊 HTTP Status Codes
-
-```ts
-// Status codes
-import {
-  HTTP_STATUS_BAD_REQUEST, // 400
-  HTTP_STATUS_CREATED, // 201
-  HTTP_STATUS_FORBIDDEN, // 403
-  HTTP_STATUS_INTERNAL_SERVER_ERROR, // 500
-  HTTP_STATUS_METHOD_NOT_ALLOWED, // 405
-  HTTP_STATUS_NOT_FOUND, // 404
-  HTTP_STATUS_OK, // 200
-  HTTP_STATUS_REQUEST_TIMEOUT, // 408
-  HTTP_STATUS_UNAUTHORIZED, // 401
-} from 'supabase-edge-kit';
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open issues or submit PRs.
-
-## 📄 License
+## License
 
 MIT
-
----
-
-**Built with ❤️ for the Supabase community**

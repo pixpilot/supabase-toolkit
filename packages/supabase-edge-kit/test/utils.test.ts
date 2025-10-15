@@ -3,14 +3,15 @@ import type { MockedFunction } from 'vitest';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  autoHandlePreflight,
   createSupabaseAdminClient,
   createSupabaseClient,
   getUser,
-  handleCors,
   RateLimiter,
   validateEnvironment,
   validateMethod,
 } from '../src';
+import { defaultResponseHeaders } from '../src/constants';
 
 // Mock Deno
 vi.mock('deno', () => ({
@@ -117,9 +118,9 @@ describe('utils', () => {
     });
   });
 
-  describe('handleCors', () => {
+  describe('autoHandlePreflight', () => {
     it('should return a CORS response', () => {
-      const result = handleCors();
+      const result = autoHandlePreflight(defaultResponseHeaders);
 
       expect(result).toBeInstanceOf(Response);
       expect(result.status).toBe(200);
@@ -127,6 +128,25 @@ describe('utils', () => {
       expect(result.headers.get('Access-Control-Allow-Headers')).toBe(
         'authorization, x-client-info, apikey, content-type',
       );
+      expect(result.headers.get('Access-Control-Allow-Methods')).toBe(
+        'GET, POST, PUT, DELETE, OPTIONS',
+      );
+    });
+
+    it('should handle custom CORS headers', () => {
+      const customCors = {
+        ...defaultResponseHeaders,
+        'Access-Control-Allow-Origin': 'https://example.com',
+        'Access-Control-Allow-Headers': 'custom-header',
+      };
+      const result = autoHandlePreflight(customCors);
+
+      expect(result).toBeInstanceOf(Response);
+      expect(result.status).toBe(200);
+      expect(result.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://example.com',
+      );
+      expect(result.headers.get('Access-Control-Allow-Headers')).toBe('custom-header');
       expect(result.headers.get('Access-Control-Allow-Methods')).toBe(
         'GET, POST, PUT, DELETE, OPTIONS',
       );

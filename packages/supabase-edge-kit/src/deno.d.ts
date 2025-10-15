@@ -60,20 +60,7 @@ declare namespace Deno {
   ): Promise<void>;
 }
 
-declare module 'npm:@supabase/supabase-js@^2' {
-  export * from '@supabase/supabase-js';
-}
-
-declare module 'npm:zod@^3' {
-  export * from 'zod';
-}
-
 // Extend the global scope to include Deno
 declare global {
   const Deno: typeof Deno;
-}
-
-declare module '@pixpilot/deno-ver-test' {
-  const version: string;
-  export { version };
 }

@@ -1,5 +1,5 @@
-import type { ApiError, ApiResponse } from './types.ts';
-
+import type { ApiError, ApiResponse, ResponseHeaders } from './types/types.ts';
+import { defaultResponseHeaders } from './constants.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_CONFLICT,
@@ -14,7 +14,6 @@ import {
   HTTP_STATUS_UNAUTHORIZED,
   HTTP_STATUS_UNPROCESSABLE_ENTITY,
 } from './http-status.ts';
-import { corsHeaders } from './types.ts';
 
 /**
  * Create a success response
@@ -23,14 +22,17 @@ export function createSuccessResponse<T>(
   data: T,
   message?: string,
   status = HTTP_STATUS_OK,
+  headers?: Partial<ResponseHeaders>,
 ): Response {
   const response: ApiResponse<T> = {
     data,
     message: message != null ? message : 'Success',
   };
 
+  const mergedHeaders = { ...defaultResponseHeaders, ...headers };
+
   return new Response(JSON.stringify(response), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...mergedHeaders, 'Content-Type': 'application/json' },
     status,
   });
 }
@@ -41,6 +43,7 @@ export function createSuccessResponse<T>(
 export function createErrorResponse(
   error: string | ApiError,
   status = HTTP_STATUS_BAD_REQUEST,
+  headers?: Partial<ResponseHeaders>,
 ): Response {
   const response: ApiResponse = {};
 
@@ -53,8 +56,10 @@ export function createErrorResponse(
     }
   }
 
+  const mergedHeaders = { ...defaultResponseHeaders, ...headers };
+
   return new Response(JSON.stringify(response), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...mergedHeaders, 'Content-Type': 'application/json' },
     status,
   });
 }
@@ -62,83 +67,120 @@ export function createErrorResponse(
 /**
  * Create an OK response (200)
  */
-export function createOkResponse<T>(data: T, message?: string): Response {
-  return createSuccessResponse(data, message, HTTP_STATUS_OK);
+export function createOkResponse<T>(
+  data: T,
+  message?: string,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createSuccessResponse(data, message, HTTP_STATUS_OK, headers);
 }
 
 /**
  * Create a Bad Request response (400)
  */
-export function createBadRequestResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_BAD_REQUEST);
+export function createBadRequestResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_BAD_REQUEST, headers);
 }
 
 /**
  * Create an Unauthorized response (401)
  */
-export function createUnauthorizedResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_UNAUTHORIZED);
+export function createUnauthorizedResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_UNAUTHORIZED, headers);
 }
 
 /**
  * Create a Forbidden response (403)
  */
-export function createForbiddenResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_FORBIDDEN);
+export function createForbiddenResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_FORBIDDEN, headers);
 }
 
 /**
  * Create a Not Found response (404)
  */
-export function createNotFoundResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_NOT_FOUND);
+export function createNotFoundResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_NOT_FOUND, headers);
 }
 
 /**
  * Create a Method Not Allowed response (405)
  */
-export function createMethodNotAllowedResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_METHOD_NOT_ALLOWED);
+export function createMethodNotAllowedResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_METHOD_NOT_ALLOWED, headers);
 }
 
 /**
  * Create a Request Timeout response (408)
  */
-export function createRequestTimeoutResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_REQUEST_TIMEOUT);
+export function createRequestTimeoutResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_REQUEST_TIMEOUT, headers);
 }
 
 /**
  * Create a Conflict response (409)
  */
-export function createConflictResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_CONFLICT);
+export function createConflictResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_CONFLICT, headers);
 }
 
 /**
  * Create an Unprocessable Entity response (422)
  */
-export function createUnprocessableEntityResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_UNPROCESSABLE_ENTITY);
+export function createUnprocessableEntityResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_UNPROCESSABLE_ENTITY, headers);
 }
 
 /**
  * Create a Too Many Requests response (429)
  */
-export function createTooManyRequestsResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_TOO_MANY_REQUESTS);
+export function createTooManyRequestsResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_TOO_MANY_REQUESTS, headers);
 }
 
 /**
  * Create an Internal Server Error response (500)
  */
-export function createInternalServerErrorResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_INTERNAL_SERVER_ERROR);
+export function createInternalServerErrorResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_INTERNAL_SERVER_ERROR, headers);
 }
 
 /**
  * Create a Service Unavailable response (503)
  */
-export function createServiceUnavailableResponse(error: string | ApiError): Response {
-  return createErrorResponse(error, HTTP_STATUS_SERVICE_UNAVAILABLE);
+export function createServiceUnavailableResponse(
+  error: string | ApiError,
+  headers?: Partial<ResponseHeaders>,
+): Response {
+  return createErrorResponse(error, HTTP_STATUS_SERVICE_UNAVAILABLE, headers);
 }

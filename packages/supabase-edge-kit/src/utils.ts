@@ -1,7 +1,6 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 import { createClient } from '@supabase/supabase-js';
-import { corsHeaders } from './types.ts';
 
 /**
  * Create a Supabase client with proper authentication
@@ -37,8 +36,9 @@ export function createSupabaseAdminClient<DB = any>(): ReturnType<
 /**
  * Handle CORS preflight requests
  */
-export function handleCors(): Response {
-  return new Response('ok', { headers: { ...corsHeaders } });
+// eslint-disable-next-line ts/explicit-module-boundary-types
+export function autoHandlePreflight(cors: any): Response {
+  return new Response('ok', { headers: cors as unknown as Record<string, string> });
 }
 
 /**
