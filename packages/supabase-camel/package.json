@@ -2,7 +2,7 @@
   "name": "supabase-camel",
   "type": "module",
   "version": "0.0.3",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.18.3",
   "author": "",
   "license": "MIT",
   "keywords": [],

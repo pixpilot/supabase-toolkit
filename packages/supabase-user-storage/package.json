@@ -2,7 +2,7 @@
   "name": "supabase-user-storage",
   "type": "module",
   "version": "0.1.0",
-  "packageManager": "pnpm@10.17.0",
+  "packageManager": "pnpm@10.18.3",
   "description": "A user-scoped file storage manager for Supabase Storage. Automatically handles user authentication and scopes all operations to the authenticated user's folder.",
   "author": "",
   "license": "MIT",

@@ -95,9 +95,9 @@ Generate types: `npx supabase gen types typescript --local > database.types.ts`
 import type { Database } from './database.types';
 import { createClient } from '@supabase/supabase-js';
 
-createServer(
+createServer<Database>( // Optional: explicitly specify Database type
   async ({ user, supabaseClient, respond }) => {
-    // Fully typed queries
+    // Fully typed queries - supabaseClient is typed with Database
     const { data } = await supabaseClient
       .from('todos')
       .select('*')
@@ -113,12 +113,12 @@ createServer(
 
 ## API Reference
 
-### `createServer(callback, options)`
+### `createServer<Database>(callback, options)`
 
 **Options:**
 
 ```typescript
-interface ServerOptions {
+interface ServerOptions<TDatabase = any> {
   authenticate?: boolean; // Default: true
   allowedMethods?: string[]; // Default: ['POST']
   timeoutMs?: number; // Default: 60000
@@ -126,18 +126,18 @@ interface ServerOptions {
   headers?: Partial<ResponseHeaders>; // Custom response headers
   requiredEnvVars?: string[]; // Default: []
   onError?: (error) => { message; code?; details? } | null;
-  createClient: (url, key, options?) => SupabaseClient; // Required
+  createClient: (url, key, options?) => SupabaseClient<TDatabase>; // Required
 }
 ```
 
 **Context:**
 
 ```typescript
-interface ServerCallbackContext {
+interface ServerCallbackContext<TDatabase = any> {
   request: Request;
   user: User; // Required if authenticate: true
-  supabaseClient: SupabaseClient;
-  supabaseAdminClient: SupabaseClient;
+  supabaseClient: SupabaseClient<TDatabase>;
+  supabaseAdminClient: SupabaseClient<TDatabase>;
   headers: ResponseHeaders; // Merged response headers (defaults + custom)
   respond: {
     // All response helpers with default headers

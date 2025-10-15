@@ -1,7 +1,7 @@
 {
   "name": "supabase-toolkit",
   "private": true,
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.18.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/pixpilot/supabase-toolkit.git"
@@ -37,8 +37,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
-    "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1",
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
     "@internal/prettier-config": "workspace:*",
     "@pixpilot/dev-config": "catalog:dev",
     "@pixpilot/workspace-package-generator": "^1.1.5",

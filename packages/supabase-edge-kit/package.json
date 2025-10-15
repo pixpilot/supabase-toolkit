@@ -2,7 +2,7 @@
   "name": "supabase-edge-kit",
   "type": "module",
   "version": "0.3.0",
-  "packageManager": "pnpm@10.17.0",
+  "packageManager": "pnpm@10.18.3",
   "description": "A lightweight, type-safe toolkit for building robust Supabase Edge Functions with built-in authentication, validation, error handling, and timeout protection",
   "author": "",
   "license": "MIT",
