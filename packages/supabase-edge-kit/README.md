@@ -9,7 +9,7 @@ Add to your `deno.json`:
 ```json
 {
   "imports": {
-    "supabase-edge-kit": "npm:supabase-edge-kit@0.2.0",
+    "supabase-edge-kit": "npm:supabase-edge-kit@0.3.0",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
   }
 }
