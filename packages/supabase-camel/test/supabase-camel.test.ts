@@ -144,13 +144,31 @@ function createMockTable() {
     lt: vi.fn(),
     lte: vi.fn(),
     like: vi.fn(),
+    likeAllOf: vi.fn(),
+    likeAnyOf: vi.fn(),
     ilike: vi.fn(),
+    ilikeAllOf: vi.fn(),
+    ilikeAnyOf: vi.fn(),
     is: vi.fn(),
     in: vi.fn(),
     contains: vi.fn(),
+    containedBy: vi.fn(),
+    rangeGt: vi.fn(),
+    rangeGte: vi.fn(),
+    rangeLt: vi.fn(),
+    rangeLte: vi.fn(),
+    rangeAdjacent: vi.fn(),
+    overlaps: vi.fn(),
+    textSearch: vi.fn(),
+    match: vi.fn(),
+    not: vi.fn(),
+    or: vi.fn(),
+    filter: vi.fn(),
     order: vi.fn(),
     limit: vi.fn(),
     range: vi.fn(),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
   };
 
   // Make all filter methods chainable
@@ -161,13 +179,31 @@ function createMockTable() {
   mockTable.lt.mockReturnValue(mockTable);
   mockTable.lte.mockReturnValue(mockTable);
   mockTable.like.mockReturnValue(mockTable);
+  mockTable.likeAllOf.mockReturnValue(mockTable);
+  mockTable.likeAnyOf.mockReturnValue(mockTable);
   mockTable.ilike.mockReturnValue(mockTable);
+  mockTable.ilikeAllOf.mockReturnValue(mockTable);
+  mockTable.ilikeAnyOf.mockReturnValue(mockTable);
   mockTable.is.mockReturnValue(mockTable);
   mockTable.in.mockReturnValue(mockTable);
   mockTable.contains.mockReturnValue(mockTable);
+  mockTable.containedBy.mockReturnValue(mockTable);
+  mockTable.rangeGt.mockReturnValue(mockTable);
+  mockTable.rangeGte.mockReturnValue(mockTable);
+  mockTable.rangeLt.mockReturnValue(mockTable);
+  mockTable.rangeLte.mockReturnValue(mockTable);
+  mockTable.rangeAdjacent.mockReturnValue(mockTable);
+  mockTable.overlaps.mockReturnValue(mockTable);
+  mockTable.textSearch.mockReturnValue(mockTable);
+  mockTable.match.mockReturnValue(mockTable);
+  mockTable.not.mockReturnValue(mockTable);
+  mockTable.or.mockReturnValue(mockTable);
+  mockTable.filter.mockReturnValue(mockTable);
   mockTable.order.mockReturnValue(mockTable);
   mockTable.limit.mockReturnValue(mockTable);
   mockTable.range.mockReturnValue(mockTable);
+  mockTable.single.mockReturnValue(mockTable);
+  mockTable.maybeSingle.mockReturnValue(mockTable);
 
   return mockTable;
 }
@@ -740,6 +776,376 @@ describe('createCamelCaseDb', () => {
           isActive: true,
         },
       ]);
+    });
+  });
+
+  describe('advanced filter methods', () => {
+    describe('pattern matching filters', () => {
+      it('should support likeAllOf filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').likeAllOf('userName', ['%John%', '%Doe%']);
+
+        expect(mockTable.likeAllOf).toHaveBeenCalledWith('user_name', [
+          '%John%',
+          '%Doe%',
+        ]);
+      });
+
+      it('should support likeAnyOf filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').likeAnyOf('userName', ['%John%', '%Jane%']);
+
+        expect(mockTable.likeAnyOf).toHaveBeenCalledWith('user_name', [
+          '%John%',
+          '%Jane%',
+        ]);
+      });
+
+      it('should support ilikeAllOf filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').ilikeAllOf('userName', ['%john%', '%doe%']);
+
+        expect(mockTable.ilikeAllOf).toHaveBeenCalledWith('user_name', [
+          '%john%',
+          '%doe%',
+        ]);
+      });
+
+      it('should support ilikeAnyOf filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').ilikeAnyOf('userName', ['%john%', '%jane%']);
+
+        expect(mockTable.ilikeAnyOf).toHaveBeenCalledWith('user_name', [
+          '%john%',
+          '%jane%',
+        ]);
+      });
+    });
+
+    describe('array and jsonb filters', () => {
+      it('should support containedBy filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('jobs').select('*').containedBy('metaData', { key: 'value' });
+
+        expect(mockTable.containedBy).toHaveBeenCalledWith('meta_data', { key: 'value' });
+      });
+
+      it('should support overlaps filter with array', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').overlaps('userId', ['1', '2', '3']);
+
+        expect(mockTable.overlaps).toHaveBeenCalledWith('user_id', ['1', '2', '3']);
+      });
+
+      it('should support overlaps filter with string', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').overlaps('userId', '[1,3)');
+
+        expect(mockTable.overlaps).toHaveBeenCalledWith('user_id', '[1,3)');
+      });
+    });
+
+    describe('range filters', () => {
+      it('should support rangeGt filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').rangeGt('userId', '[1,10)');
+
+        expect(mockTable.rangeGt).toHaveBeenCalledWith('user_id', '[1,10)');
+      });
+
+      it('should support rangeGte filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').rangeGte('userId', '[1,10)');
+
+        expect(mockTable.rangeGte).toHaveBeenCalledWith('user_id', '[1,10)');
+      });
+
+      it('should support rangeLt filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').rangeLt('userId', '[1,10)');
+
+        expect(mockTable.rangeLt).toHaveBeenCalledWith('user_id', '[1,10)');
+      });
+
+      it('should support rangeLte filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').rangeLte('userId', '[1,10)');
+
+        expect(mockTable.rangeLte).toHaveBeenCalledWith('user_id', '[1,10)');
+      });
+
+      it('should support rangeAdjacent filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').rangeAdjacent('userId', '[1,10)');
+
+        expect(mockTable.rangeAdjacent).toHaveBeenCalledWith('user_id', '[1,10)');
+      });
+    });
+
+    describe('full-text search', () => {
+      it('should support textSearch without options', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('jobs').select('*').textSearch('shortDescription', 'developer');
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'developer',
+          undefined,
+        );
+      });
+
+      it('should support textSearch with plain type', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('jobs')
+          .select('*')
+          .textSearch('shortDescription', 'developer', { type: 'plain' });
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'developer',
+          {
+            type: 'plain',
+          },
+        );
+      });
+
+      it('should support textSearch with phrase type', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('jobs')
+          .select('*')
+          .textSearch('shortDescription', 'senior developer', { type: 'phrase' });
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'senior developer',
+          {
+            type: 'phrase',
+          },
+        );
+      });
+
+      it('should support textSearch with websearch type', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('jobs')
+          .select('*')
+          .textSearch('shortDescription', 'developer OR engineer', { type: 'websearch' });
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'developer OR engineer',
+          { type: 'websearch' },
+        );
+      });
+
+      it('should support textSearch with config', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('jobs')
+          .select('*')
+          .textSearch('shortDescription', 'developer', { config: 'english' });
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'developer',
+          {
+            config: 'english',
+          },
+        );
+      });
+    });
+
+    describe('advanced filters', () => {
+      it('should support match filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .match({ userName: 'John Doe', isActive: true });
+
+        expect(mockTable.match).toHaveBeenCalledWith({
+          user_name: 'John Doe',
+          is_active: true,
+        });
+      });
+
+      it('should support not filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').not('isActive', 'is', true);
+
+        expect(mockTable.not).toHaveBeenCalledWith('is_active', 'is', true);
+      });
+
+      it('should support or filter', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .or('user_name.eq.John,email_address.eq.john@example.com');
+
+        expect(mockTable.or).toHaveBeenCalledWith(
+          'user_name.eq.John,email_address.eq.john@example.com',
+          undefined,
+        );
+      });
+
+      it('should support or filter with referencedTable option', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .or('user_name.eq.John,email_address.eq.john@example.com', {
+            referencedTable: 'profiles',
+          });
+
+        expect(mockTable.or).toHaveBeenCalledWith(
+          'user_name.eq.John,email_address.eq.john@example.com',
+          { referencedTable: 'profiles' },
+        );
+      });
+
+      it('should support filter method', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').filter('userName', 'eq', 'John Doe');
+
+        expect(mockTable.filter).toHaveBeenCalledWith('user_name', 'eq', 'John Doe');
+      });
+    });
+
+    describe('query modifiers', () => {
+      it('should support single modifier', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').eq('userId', '123').single();
+
+        expect(mockTable.single).toHaveBeenCalled();
+      });
+
+      it('should support maybeSingle modifier', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db.from('users').select('*').eq('userId', '123').maybeSingle();
+
+        expect(mockTable.maybeSingle).toHaveBeenCalled();
+      });
+    });
+
+    describe('chaining multiple advanced filters', () => {
+      it('should support chaining pattern matching filters', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .likeAllOf('userName', ['%John%', '%Doe%'])
+          .ilikeAnyOf('emailAddress', ['%gmail%', '%yahoo%'])
+          .limit(10);
+
+        expect(mockTable.likeAllOf).toHaveBeenCalledWith('user_name', [
+          '%John%',
+          '%Doe%',
+        ]);
+        expect(mockTable.ilikeAnyOf).toHaveBeenCalledWith('email_address', [
+          '%gmail%',
+          '%yahoo%',
+        ]);
+        expect(mockTable.limit).toHaveBeenCalledWith(10);
+      });
+
+      it('should support chaining range filters', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .rangeGt('userId', '[1,10)')
+          .rangeLte('userId', '[50,100)')
+          .order('userId');
+
+        expect(mockTable.rangeGt).toHaveBeenCalledWith('user_id', '[1,10)');
+        expect(mockTable.rangeLte).toHaveBeenCalledWith('user_id', '[50,100)');
+        expect(mockTable.order).toHaveBeenCalledWith('user_id', undefined);
+      });
+
+      it('should support chaining with not and or filters', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .select('*')
+          .not('isActive', 'is', false)
+          .or('user_name.eq.John,user_name.eq.Jane');
+
+        expect(mockTable.not).toHaveBeenCalledWith('is_active', 'is', false);
+        expect(mockTable.or).toHaveBeenCalledWith(
+          'user_name.eq.John,user_name.eq.Jane',
+          undefined,
+        );
+      });
+    });
+
+    describe('advanced filters on update queries', () => {
+      it('should support advanced filters on update', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .update({ isActive: false })
+          .likeAllOf('userName', ['%Admin%'])
+          .not('emailAddress', 'eq', 'admin@example.com');
+
+        expect(mockTable.likeAllOf).toHaveBeenCalledWith('user_name', ['%Admin%']);
+        expect(mockTable.not).toHaveBeenCalledWith(
+          'email_address',
+          'eq',
+          'admin@example.com',
+        );
+      });
+
+      it('should support textSearch on update', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('jobs')
+          .update({ isActive: false })
+          .textSearch('shortDescription', 'deprecated', { type: 'plain' });
+
+        expect(mockTable.textSearch).toHaveBeenCalledWith(
+          'short_description',
+          'deprecated',
+          {
+            type: 'plain',
+          },
+        );
+      });
+    });
+
+    describe('advanced filters on delete queries', () => {
+      it('should support advanced filters on delete', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .delete()
+          .ilikeAnyOf('emailAddress', ['%spam%', '%fake%'])
+          .or('is_active.is.false,created_at.lt.2020-01-01');
+
+        expect(mockTable.ilikeAnyOf).toHaveBeenCalledWith('email_address', [
+          '%spam%',
+          '%fake%',
+        ]);
+        expect(mockTable.or).toHaveBeenCalledWith(
+          'is_active.is.false,created_at.lt.2020-01-01',
+          undefined,
+        );
+      });
+
+      it('should support match on delete', async () => {
+        const db = createCamelCaseDb(mockSupabaseClient);
+        await db
+          .from('users')
+          .delete()
+          .match({ isActive: false, userName: 'Deleted User' });
+
+        expect(mockTable.match).toHaveBeenCalledWith({
+          is_active: false,
+          user_name: 'Deleted User',
+        });
+      });
     });
   });
 

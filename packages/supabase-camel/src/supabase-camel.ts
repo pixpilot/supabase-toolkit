@@ -22,7 +22,7 @@ interface CamelCasePostgrestResponse<T> extends Omit<PostgrestResponse<T>, 'data
   data: T | null;
 }
 
-// Simplified table interface
+// Simplified table interface with all filter methods
 interface SupabaseTable {
   select: (query?: string) => Promise<PostgrestResponse<unknown>>;
   insert: (data: unknown) => Promise<PostgrestResponse<unknown>>;
@@ -39,16 +39,41 @@ interface SupabaseTable {
   lt: (column: string, value: unknown) => SupabaseTable;
   lte: (column: string, value: unknown) => SupabaseTable;
   like: (column: string, pattern: string) => SupabaseTable;
+  likeAllOf: (column: string, patterns: readonly string[]) => SupabaseTable;
+  likeAnyOf: (column: string, patterns: readonly string[]) => SupabaseTable;
   ilike: (column: string, pattern: string) => SupabaseTable;
+  ilikeAllOf: (column: string, patterns: readonly string[]) => SupabaseTable;
+  ilikeAnyOf: (column: string, patterns: readonly string[]) => SupabaseTable;
   is: (column: string, value: boolean | null) => SupabaseTable;
   in: (column: string, values: unknown[]) => SupabaseTable;
   contains: (column: string, value: unknown) => SupabaseTable;
+  containedBy: (column: string, value: unknown) => SupabaseTable;
+  rangeGt: (column: string, range: string) => SupabaseTable;
+  rangeGte: (column: string, range: string) => SupabaseTable;
+  rangeLt: (column: string, range: string) => SupabaseTable;
+  rangeLte: (column: string, range: string) => SupabaseTable;
+  rangeAdjacent: (column: string, range: string) => SupabaseTable;
+  overlaps: (column: string, value: unknown) => SupabaseTable;
+  textSearch: (
+    column: string,
+    query: string,
+    options?: { config?: string; type?: 'plain' | 'phrase' | 'websearch' },
+  ) => SupabaseTable;
+  match: (query: Record<string, unknown>) => SupabaseTable;
+  not: (column: string, operator: string, value: unknown) => SupabaseTable;
+  or: (
+    filters: string,
+    options?: { foreignTable?: string; referencedTable?: string },
+  ) => SupabaseTable;
+  filter: (column: string, operator: string, value: unknown) => SupabaseTable;
   order: (
     column: string,
     options?: { ascending?: boolean; nullsFirst?: boolean },
   ) => SupabaseTable;
   limit: (count: number) => SupabaseTable;
   range: (from: number, to: number) => SupabaseTable;
+  single: () => SupabaseTable;
+  maybeSingle: () => SupabaseTable;
 }
 
 /**
@@ -108,102 +133,179 @@ class CamelCaseTableQueryBuilder<
 }
 
 /**
- * Select query builder with filtering capabilities
+ * Base class with shared filter logic to avoid code repetition
  */
-class CamelCaseSelectQueryBuilder<
+abstract class BaseFilterBuilder<
   DB extends Record<string, any>,
   T extends keyof DB['public']['Tables'],
 > {
-  constructor(
-    private originalTable: SupabaseTable,
-    private query?: string,
-  ) {}
+  constructor(protected originalTable: SupabaseTable) {}
 
-  // Query filters with method chaining
+  /**
+   * Helper method to convert camelCase column to snake_case
+   */
+  protected convertColumn(column: keyof CamelCaseRow<DB, T>): string {
+    const snakeColumn = keysToSnakeCase({ [column]: null });
+    return Object.keys(snakeColumn)[0]!;
+  }
+
+  // Basic comparison filters
   eq(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.eq(snakeColumnKey, value);
+    this.originalTable.eq(this.convertColumn(column), value);
     return this;
   }
 
   neq(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.neq(snakeColumnKey, value);
+    this.originalTable.neq(this.convertColumn(column), value);
     return this;
   }
 
   gt(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.gt(snakeColumnKey, value);
+    this.originalTable.gt(this.convertColumn(column), value);
     return this;
   }
 
   gte(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.gte(snakeColumnKey, value);
+    this.originalTable.gte(this.convertColumn(column), value);
     return this;
   }
 
   lt(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.lt(snakeColumnKey, value);
+    this.originalTable.lt(this.convertColumn(column), value);
     return this;
   }
 
   lte(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.lte(snakeColumnKey, value);
+    this.originalTable.lte(this.convertColumn(column), value);
     return this;
   }
 
+  // Pattern matching filters
   like(column: keyof CamelCaseRow<DB, T>, pattern: string): this {
-    const snakeColumn = keysToSnakeCase({ [column]: pattern });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.like(snakeColumnKey, pattern);
+    this.originalTable.like(this.convertColumn(column), pattern);
+    return this;
+  }
+
+  likeAllOf(column: keyof CamelCaseRow<DB, T>, patterns: readonly string[]): this {
+    this.originalTable.likeAllOf(this.convertColumn(column), patterns);
+    return this;
+  }
+
+  likeAnyOf(column: keyof CamelCaseRow<DB, T>, patterns: readonly string[]): this {
+    this.originalTable.likeAnyOf(this.convertColumn(column), patterns);
     return this;
   }
 
   ilike(column: keyof CamelCaseRow<DB, T>, pattern: string): this {
-    const snakeColumn = keysToSnakeCase({ [column]: pattern });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.ilike(snakeColumnKey, pattern);
+    this.originalTable.ilike(this.convertColumn(column), pattern);
     return this;
   }
 
+  ilikeAllOf(column: keyof CamelCaseRow<DB, T>, patterns: readonly string[]): this {
+    this.originalTable.ilikeAllOf(this.convertColumn(column), patterns);
+    return this;
+  }
+
+  ilikeAnyOf(column: keyof CamelCaseRow<DB, T>, patterns: readonly string[]): this {
+    this.originalTable.ilikeAnyOf(this.convertColumn(column), patterns);
+    return this;
+  }
+
+  // Null/Boolean checks
   is(column: keyof CamelCaseRow<DB, T>, value: boolean | null): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.is(snakeColumnKey, value);
+    this.originalTable.is(this.convertColumn(column), value);
     return this;
   }
 
+  // Array/Set operations
   in(column: keyof CamelCaseRow<DB, T>, values: unknown[]): this {
-    const snakeColumn = keysToSnakeCase({ [column]: values });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.in(snakeColumnKey, values);
+    this.originalTable.in(this.convertColumn(column), values);
     return this;
   }
 
   contains(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.contains(snakeColumnKey, value);
+    this.originalTable.contains(this.convertColumn(column), value);
     return this;
   }
 
+  containedBy(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
+    this.originalTable.containedBy(this.convertColumn(column), value);
+    return this;
+  }
+
+  // Range operations
+  rangeGt(column: keyof CamelCaseRow<DB, T>, range: string): this {
+    this.originalTable.rangeGt(this.convertColumn(column), range);
+    return this;
+  }
+
+  rangeGte(column: keyof CamelCaseRow<DB, T>, range: string): this {
+    this.originalTable.rangeGte(this.convertColumn(column), range);
+    return this;
+  }
+
+  rangeLt(column: keyof CamelCaseRow<DB, T>, range: string): this {
+    this.originalTable.rangeLt(this.convertColumn(column), range);
+    return this;
+  }
+
+  rangeLte(column: keyof CamelCaseRow<DB, T>, range: string): this {
+    this.originalTable.rangeLte(this.convertColumn(column), range);
+    return this;
+  }
+
+  rangeAdjacent(column: keyof CamelCaseRow<DB, T>, range: string): this {
+    this.originalTable.rangeAdjacent(this.convertColumn(column), range);
+    return this;
+  }
+
+  overlaps(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
+    this.originalTable.overlaps(this.convertColumn(column), value);
+    return this;
+  }
+
+  // Full-text search
+  textSearch(
+    column: keyof CamelCaseRow<DB, T>,
+    query: string,
+    options?: { config?: string; type?: 'plain' | 'phrase' | 'websearch' },
+  ): this {
+    this.originalTable.textSearch(this.convertColumn(column), query, options);
+    return this;
+  }
+
+  // Match multiple columns
+  match(query: Partial<CamelCaseRow<DB, T>>): this {
+    const snakeCaseQuery = keysToSnakeCase(query);
+    this.originalTable.match(snakeCaseQuery);
+    return this;
+  }
+
+  // Advanced filters
+  not(column: keyof CamelCaseRow<DB, T>, operator: string, value: unknown): this {
+    this.originalTable.not(this.convertColumn(column), operator, value);
+    return this;
+  }
+
+  or(
+    filters: string,
+    options?: { foreignTable?: string; referencedTable?: string },
+  ): this {
+    this.originalTable.or(filters, options);
+    return this;
+  }
+
+  filter(column: keyof CamelCaseRow<DB, T>, operator: string, value: unknown): this {
+    this.originalTable.filter(this.convertColumn(column), operator, value);
+    return this;
+  }
+
+  // Query modifiers
   order(
     column: keyof CamelCaseRow<DB, T>,
     options?: { ascending?: boolean; nullsFirst?: boolean },
   ): this {
-    const snakeColumn = keysToSnakeCase({ [column]: null });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.order(snakeColumnKey, options);
+    this.originalTable.order(this.convertColumn(column), options);
     return this;
   }
 
@@ -215,6 +317,31 @@ class CamelCaseSelectQueryBuilder<
   range(from: number, to: number): this {
     this.originalTable.range(from, to);
     return this;
+  }
+
+  single(): this {
+    this.originalTable.single();
+    return this;
+  }
+
+  maybeSingle(): this {
+    this.originalTable.maybeSingle();
+    return this;
+  }
+}
+
+/**
+ * Select query builder with filtering capabilities
+ */
+class CamelCaseSelectQueryBuilder<
+  DB extends Record<string, any>,
+  T extends keyof DB['public']['Tables'],
+> extends BaseFilterBuilder<DB, T> {
+  constructor(
+    originalTable: SupabaseTable,
+    private query?: string,
+  ) {
+    super(originalTable);
   }
 
   // Execute the query
@@ -255,25 +382,12 @@ class CamelCaseSelectQueryBuilder<
 class CamelCaseUpdateQueryBuilder<
   DB extends Record<string, any>,
   T extends keyof DB['public']['Tables'],
-> {
+> extends BaseFilterBuilder<DB, T> {
   constructor(
-    private originalTable: SupabaseTable,
+    originalTable: SupabaseTable,
     private updateData: unknown,
-  ) {}
-
-  // Query filters
-  eq(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.eq(snakeColumnKey, value);
-    return this;
-  }
-
-  neq(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.neq(snakeColumnKey, value);
-    return this;
+  ) {
+    super(originalTable);
   }
 
   // Execute the update
@@ -314,15 +428,9 @@ class CamelCaseUpdateQueryBuilder<
 class CamelCaseDeleteQueryBuilder<
   DB extends Record<string, any>,
   T extends keyof DB['public']['Tables'],
-> {
-  constructor(private originalTable: SupabaseTable) {}
-
-  // Query filters
-  eq(column: keyof CamelCaseRow<DB, T>, value: unknown): this {
-    const snakeColumn = keysToSnakeCase({ [column]: value });
-    const snakeColumnKey = Object.keys(snakeColumn)[0]!;
-    this.originalTable.eq(snakeColumnKey, value);
-    return this;
+> extends BaseFilterBuilder<DB, T> {
+  constructor(originalTable: SupabaseTable) {
+    super(originalTable);
   }
 
   // Execute the delete
