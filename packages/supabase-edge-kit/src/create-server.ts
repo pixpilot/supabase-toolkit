@@ -4,6 +4,7 @@ import type { ServerCallback, ServerCallbackContext } from './types/server-callb
 import type { ServerOptions } from './types/server-options.ts';
 
 import type { ResponseHeaders } from './types/types.ts';
+import { ZodError } from 'zod';
 import { defaultResponseHeaders } from './constants.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
@@ -224,6 +225,17 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
       if (customError != null) {
         return createErrorResponse(customError, HTTP_STATUS_BAD_REQUEST, config.headers);
       }
+    }
+
+    if (error instanceof ZodError) {
+      return createErrorResponse(
+        {
+          message: 'Invalid data provided.',
+          code: 'VALIDATION_ERROR',
+          details: error.format(),
+        },
+        HTTP_STATUS_BAD_REQUEST,
+      );
     }
 
     // Handle JSON parsing errors

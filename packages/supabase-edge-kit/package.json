@@ -59,7 +59,8 @@
     "eslint": "catalog:dev",
     "rollup": "catalog:dev",
     "typescript": "catalog:dev",
-    "vitest": "catalog:dev"
+    "vitest": "catalog:dev",
+    "zod": "catalog:peer"
   },
   "prettier": "@internal/prettier-config"
 }
