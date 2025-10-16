@@ -24,11 +24,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createServer } from 'supabase-edge-kit';
 
 createServer(
-  async ({ user, supabaseClient, respond }) => {
-    const { data } = await supabaseClient
-      .from('users')
-      .select('*')
-      .eq('user_id', user.id);
+  async ({ user, client, respond }) => {
+    const { data } = await client.from('users').select('*').eq('user_id', user.id);
 
     return respond.success(data);
   },
@@ -59,12 +56,12 @@ const schema = z.object({
 });
 
 createServer(
-  async ({ request, user, supabaseClient, respond }) => {
+  async ({ request, user, client, respond }) => {
     try {
       const body = await request.json();
       const validatedData = schema.parse(body);
 
-      const { data } = await supabaseClient
+      const { data } = await client
         .from('jobs')
         .insert({ ...validatedData, user_id: user.id })
         .select()
@@ -96,12 +93,9 @@ import type { Database } from './database.types';
 import { createClient } from '@supabase/supabase-js';
 
 createServer<Database>( // Optional: explicitly specify Database type
-  async ({ user, supabaseClient, respond }) => {
-    // Fully typed queries - supabaseClient is typed with Database
-    const { data } = await supabaseClient
-      .from('todos')
-      .select('*')
-      .eq('user_id', user.id);
+  async ({ user, client, respond }) => {
+    // Fully typed queries - client is typed with Database
+    const { data } = await client.from('todos').select('*').eq('user_id', user.id);
 
     return respond.success(data);
   },
@@ -136,8 +130,8 @@ interface ServerOptions<TDatabase = any> {
 interface ServerCallbackContext<TDatabase = any> {
   request: Request;
   user: User; // Required if authenticate: true
-  supabaseClient: SupabaseClient<TDatabase>;
-  supabaseAdminClient: SupabaseClient<TDatabase>;
+  client: SupabaseClient<TDatabase>;
+  adminClient: SupabaseClient<TDatabase>;
   headers: ResponseHeaders; // Merged response headers (defaults + custom)
   respond: {
     // All response helpers with default headers
@@ -230,18 +224,15 @@ return respond.success(data, 'Custom message', successStatus, {
 
 ```typescript
 createServer(
-  async ({ request, user, supabaseClient, respond }) => {
+  async ({ request, user, client, respond }) => {
     if (request.method === 'GET') {
-      const { data } = await supabaseClient
-        .from('users')
-        .select('*')
-        .eq('user_id', user.id);
+      const { data } = await client.from('users').select('*').eq('user_id', user.id);
       return respond.success(data);
     }
 
     if (request.method === 'POST') {
       const body = await request.json();
-      const { data } = await supabaseClient
+      const { data } = await client
         .from('users')
         .insert({ ...body, user_id: user.id })
         .select()
@@ -262,8 +253,8 @@ createServer(
 
 ```typescript
 createServer(
-  async ({ user, supabaseClient, supabaseAdminClient, respond }) => {
-    const { data: userRole } = await supabaseClient
+  async ({ user, client, adminClient, respond }) => {
+    const { data: userRole } = await client
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -274,7 +265,7 @@ createServer(
     }
 
     // Use admin client to bypass RLS
-    const { data } = await supabaseAdminClient.from('sensitive_data').select('*');
+    const { data } = await adminClient.from('sensitive_data').select('*');
 
     return respond.success(data);
   },
@@ -288,7 +279,7 @@ createServer(
 
 ```typescript
 createServer(
-  async ({ request, user, supabaseClient, respond }) => {
+  async ({ request, user, client, respond }) => {
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -296,7 +287,7 @@ createServer(
       return respond.badRequest('No file provided');
     }
 
-    const { data, error } = await supabaseClient.storage
+    const { data, error } = await client.storage
       .from('uploads')
       .upload(`${user.id}/${file.name}`, file);
 
@@ -332,6 +323,34 @@ createServer(
     createClient: (url, key, options) => createClient(url, key, options),
     headers: {
       'Access-Control-Allow-Origin': 'https://default-domain.com',
+    },
+  },
+);
+```
+
+### Error Handling with Zod
+
+You can handle validation errors globally using the `onError` option:
+
+```typescript
+import { z, ZodError } from 'zod';
+
+createServer(
+  async ({ request, client, respond }) => {
+    const body = await request.json();
+    const validatedData = schema.parse(body); // Will be caught by onError
+    // ... rest of your logic
+  },
+  {
+    createClient: (url, key) => createClient(url, key),
+    onError: (error) => {
+      if (error instanceof ZodError) {
+        return {
+          message: error.issues.map((issue) => issue.message).join(', '),
+          code: 'VALIDATION_ERROR',
+        };
+      }
+      return null; // Use default error handling
     },
   },
 );

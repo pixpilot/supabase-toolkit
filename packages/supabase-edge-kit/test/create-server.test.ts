@@ -41,13 +41,13 @@ vi.mock('../src/responses', () => ({
 }));
 
 // Mock Supabase client
-const mockSupabaseClient = {
+const mockClient = {
   auth: {
     getUser: vi.fn(),
   },
 } as unknown as SupabaseClient<unknown, never, never, never, never>;
 
-const mockSupabaseAdminClient = {} as SupabaseClient<unknown, never, never, never, never>;
+const mockAdminClient = {} as SupabaseClient<unknown, never, never, never, never>;
 
 const mockUser: User = {
   id: 'test-user-id',
@@ -83,9 +83,9 @@ describe('createServer', () => {
       (url: string, key: string, options?: SupabaseClientOptions<string>) => {
         // Return user client or admin client based on the key
         if (key === 'test-anon-key' || options != null) {
-          return mockSupabaseClient;
+          return mockClient;
         }
-        return mockSupabaseAdminClient;
+        return mockAdminClient;
       },
     );
 
@@ -108,7 +108,7 @@ describe('createServer', () => {
     };
 
     // Mock Supabase client methods
-    mockSupabaseClient.auth.getUser = vi.fn().mockResolvedValue({
+    mockClient.auth.getUser = vi.fn().mockResolvedValue({
       data: { user: mockUser },
       error: null,
     });
@@ -148,8 +148,8 @@ describe('createServer', () => {
       expect.objectContaining({
         request: mockRequest,
         user: mockUser,
-        supabaseClient: mockSupabaseClient,
-        supabaseAdminClient: mockSupabaseAdminClient,
+        client: mockClient,
+        adminClient: mockAdminClient,
         headers: {
           ...defaultResponseHeaders,
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -233,14 +233,14 @@ describe('createServer', () => {
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(mockSupabaseClient.auth.getUser).toHaveBeenCalled();
+    expect(mockClient.auth.getUser).toHaveBeenCalled();
     expect(mockCallback).toHaveBeenCalledWith(
       expect.objectContaining({ user: mockUser }),
     );
   });
 
   it('should handle authentication failure', async () => {
-    mockSupabaseClient.auth.getUser = vi.fn().mockResolvedValue({
+    mockClient.auth.getUser = vi.fn().mockResolvedValue({
       data: { user: null },
       error: null,
     });
@@ -262,7 +262,7 @@ describe('createServer', () => {
     const handler = (globalThis as any).__testHandler;
     await handler(mockRequest);
 
-    expect(mockSupabaseClient.auth.getUser).not.toHaveBeenCalled();
+    expect(mockClient.auth.getUser).not.toHaveBeenCalled();
     expect(mockCallback).toHaveBeenCalledWith(
       expect.objectContaining({ user: undefined }),
     );
@@ -431,8 +431,8 @@ describe('createServer', () => {
       expect.objectContaining({
         request: mockRequest,
         user: mockUser,
-        supabaseClient: mockSupabaseClient,
-        supabaseAdminClient: mockSupabaseAdminClient,
+        client: mockClient,
+        adminClient: mockAdminClient,
         headers: {
           ...defaultResponseHeaders,
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -500,9 +500,7 @@ describe('createServer', () => {
 
   it('should handle getUser throwing an error as unauthorized', async () => {
     // Mock auth.getUser to throw an error
-    mockSupabaseClient.auth.getUser = vi
-      .fn()
-      .mockRejectedValue(new Error('Auth service error'));
+    mockClient.auth.getUser = vi.fn().mockRejectedValue(new Error('Auth service error'));
 
     createServer(mockCallback, { createClient: mockCreateClient });
 

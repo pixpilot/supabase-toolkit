@@ -4,7 +4,6 @@ import type { ServerCallback, ServerCallbackContext } from './types/server-callb
 import type { ServerOptions } from './types/server-options.ts';
 
 import type { ResponseHeaders } from './types/types.ts';
-import { ZodError } from 'zod';
 import { defaultResponseHeaders } from './constants.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
@@ -54,10 +53,10 @@ const DEFAULT_OPTIONS: Omit<ServerOptions, 'createClient'> = {
  * import { createServer } from 'supabase-edge-kit';
  *
  * // Database type is inferred from createClient<Database>
- * createServer(async ({ request, user, supabaseClient }) => {
+ * createServer(async ({ request, user, client }) => {
  *   const body = await request.json();
  *   // user is guaranteed to be defined here
- *   // supabaseClient is fully typed with Database type
+ *   // client is fully typed with Database type
  *   return createSuccessResponse({ message: 'Hello world' });
  * }, {
  *   createClient: (url, key, options) => createClient<Database>(url, key, options)
@@ -160,7 +159,7 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
   }
 
   // Create Supabase clients using injected createClient function
-  const supabaseClient = config.createClient(
+  const client = config.createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     {
@@ -172,7 +171,7 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
     },
   );
 
-  const supabaseAdminClient = config.createClient(
+  const adminClient = config.createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   );
@@ -181,8 +180,8 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
   let user: User | undefined;
   if (config.authenticate) {
     try {
-      // Get user from the supabaseClient
-      const result = await supabaseClient.auth.getUser();
+      // Get user from the client
+      const result = await client.auth.getUser();
       const fetchedUser = result.data.user;
       if (result.error != null) throw result.error;
       user = fetchedUser ?? undefined;
@@ -210,8 +209,8 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
   const context = {
     request: req,
     user,
-    supabaseClient,
-    supabaseAdminClient,
+    client,
+    adminClient,
     headers: config.headers,
     respond,
   } as ServerCallbackContext<TDatabase, TAuthenticate>;
@@ -225,17 +224,6 @@ async function processRequest<TDatabase = any, TAuthenticate extends boolean = t
       if (customError != null) {
         return createErrorResponse(customError, HTTP_STATUS_BAD_REQUEST, config.headers);
       }
-    }
-
-    if (error instanceof ZodError) {
-      return createErrorResponse(
-        {
-          message: 'Invalid data provided.',
-          code: 'VALIDATION_ERROR',
-          details: error.format(),
-        },
-        HTTP_STATUS_BAD_REQUEST,
-      );
     }
 
     // Handle JSON parsing errors

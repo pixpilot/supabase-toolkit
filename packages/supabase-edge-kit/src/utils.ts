@@ -16,13 +16,13 @@ export function validateMethod(req: Request, allowedMethods: string[]): boolean 
 }
 
 export async function getUser<DB = any>(
-  supabaseClient: SupabaseClient<DB>,
+  client: SupabaseClient<DB>,
 ): Promise<User | null> {
   try {
     const {
       data: { user },
       error,
-    } = await supabaseClient.auth.getUser();
+    } = await client.auth.getUser();
     if (error) throw error;
     return user;
   } catch (error) {

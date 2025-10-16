@@ -93,10 +93,10 @@ describe('utils', () => {
   });
 
   describe('getUser', () => {
-    let mockSupabaseClient: SupabaseClient;
+    let mockClient: SupabaseClient;
 
     beforeEach(() => {
-      mockSupabaseClient = {
+      mockClient = {
         auth: {
           getUser: vi.fn(),
         },
@@ -115,34 +115,34 @@ describe('utils', () => {
         user_metadata: {},
       };
 
-      (mockSupabaseClient.auth.getUser as MockedFunction<any>).mockResolvedValue({
+      (mockClient.auth.getUser as MockedFunction<any>).mockResolvedValue({
         data: { user: mockUser },
         error: null,
       });
 
-      const result = await getUser(mockSupabaseClient);
+      const result = await getUser(mockClient);
 
       expect(result).toEqual(mockUser);
-      expect(mockSupabaseClient.auth.getUser).toHaveBeenCalled();
+      expect(mockClient.auth.getUser).toHaveBeenCalled();
     });
 
     it('should return null when getUser fails', async () => {
-      (mockSupabaseClient.auth.getUser as MockedFunction<any>).mockResolvedValue({
+      (mockClient.auth.getUser as MockedFunction<any>).mockResolvedValue({
         data: { user: null },
         error: new Error('Auth error'),
       });
 
-      const result = await getUser(mockSupabaseClient);
+      const result = await getUser(mockClient);
 
       expect(result).toBeNull();
     });
 
     it('should return null when an exception occurs', async () => {
-      (mockSupabaseClient.auth.getUser as MockedFunction<any>).mockRejectedValue(
+      (mockClient.auth.getUser as MockedFunction<any>).mockRejectedValue(
         new Error('Network error'),
       );
 
-      const result = await getUser(mockSupabaseClient);
+      const result = await getUser(mockClient);
 
       expect(result).toBeNull();
     });

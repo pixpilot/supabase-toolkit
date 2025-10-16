@@ -21,11 +21,11 @@ export interface ServerCallbackContext<
   /**
    * Supabase client with user context (respects RLS)
    */
-  supabaseClient: SupabaseClient<TDatabase>;
+  client: SupabaseClient<TDatabase>;
   /**
    * Supabase admin client (bypasses RLS)
    */
-  supabaseAdminClient: SupabaseClient<TDatabase>;
+  adminClient: SupabaseClient<TDatabase>;
   /**
    * Merged response headers (defaults + custom)
    */
