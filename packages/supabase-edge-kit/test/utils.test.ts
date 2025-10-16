@@ -4,8 +4,6 @@ import type { MockedFunction } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   autoHandlePreflight,
-  createSupabaseAdminClient,
-  createSupabaseClient,
   getUser,
   RateLimiter,
   validateEnvironment,
@@ -25,9 +23,6 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(),
 }));
 
-// Import the mocked functions
-const { createClient } = vi.mocked(await import('@supabase/supabase-js'));
-
 describe('utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,85 +32,6 @@ describe('utils', () => {
         get: vi.fn(),
       },
     };
-  });
-
-  describe('createSupabaseClient', () => {
-    it('should create a Supabase client with correct configuration', () => {
-      const mockClient = { auth: {} };
-      createClient.mockReturnValue(mockClient as any);
-      (globalThis as any).Deno.env.get.mockImplementation((key: string) => {
-        if (key === 'SUPABASE_URL') return 'https://test.supabase.co';
-        if (key === 'SUPABASE_ANON_KEY') return 'test-anon-key';
-        return undefined;
-      });
-
-      const req = new Request('http://localhost', {
-        headers: { Authorization: 'Bearer test-token' },
-      });
-
-      const result = createSupabaseClient(req);
-
-      expect(createClient).toHaveBeenCalledWith(
-        'https://test.supabase.co',
-        'test-anon-key',
-        {
-          global: {
-            headers: {
-              Authorization: 'Bearer test-token',
-            },
-          },
-        },
-      );
-      expect(result).toBe(mockClient);
-    });
-
-    it('should handle missing environment variables', () => {
-      createClient.mockReturnValue({} as any);
-      (globalThis as any).Deno.env.get.mockReturnValue(undefined);
-
-      const req = new Request('http://localhost');
-
-      const result = createSupabaseClient(req);
-
-      expect(createClient).toHaveBeenCalledWith('', '', {
-        global: {
-          headers: {
-            Authorization: req.headers.get('Authorization')!,
-          },
-        },
-      });
-      expect(result).toBeDefined();
-    });
-  });
-
-  describe('createSupabaseAdminClient', () => {
-    it('should create a Supabase admin client with service role key', () => {
-      const mockClient = { auth: {} };
-      createClient.mockReturnValue(mockClient as any);
-      (globalThis as any).Deno.env.get.mockImplementation((key: string) => {
-        if (key === 'SUPABASE_URL') return 'https://test.supabase.co';
-        if (key === 'SUPABASE_SERVICE_ROLE_KEY') return 'test-service-key';
-        return undefined;
-      });
-
-      const result = createSupabaseAdminClient();
-
-      expect(createClient).toHaveBeenCalledWith(
-        'https://test.supabase.co',
-        'test-service-key',
-      );
-      expect(result).toBe(mockClient);
-    });
-
-    it('should handle missing environment variables', () => {
-      createClient.mockReturnValue({} as any);
-      (globalThis as any).Deno.env.get.mockReturnValue(undefined);
-
-      const result = createSupabaseAdminClient();
-
-      expect(createClient).toHaveBeenCalledWith('', '');
-      expect(result).toBeDefined();
-    });
   });
 
   describe('autoHandlePreflight', () => {

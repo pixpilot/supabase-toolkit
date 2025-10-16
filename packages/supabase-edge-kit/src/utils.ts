@@ -1,38 +1,5 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 
-import { createClient } from '@supabase/supabase-js';
-
-/**
- * Create a Supabase client with proper authentication
- */
-export function createSupabaseClient<DB = any>(
-  req: Request,
-): ReturnType<typeof createClient<DB>> {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    {
-      global: {
-        headers: {
-          Authorization: req.headers.get('Authorization')!,
-        },
-      },
-    },
-  );
-}
-
-/**
- * Create a Supabase admin client with service role key (bypasses RLS)
- */
-export function createSupabaseAdminClient<DB = any>(): ReturnType<
-  typeof createClient<DB>
-> {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  );
-}
-
 /**
  * Handle CORS preflight requests
  */
