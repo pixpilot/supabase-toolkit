@@ -1,5 +1,11 @@
 # supabase-edge-kit
 
+## 0.3.1
+
+### Patch Changes
+
+- add `zod` as a peer dependency and update version
+
 ## 0.3.0
 
 ### Minor Changes
