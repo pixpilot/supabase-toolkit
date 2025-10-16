@@ -1,5 +1,11 @@
 # supabase-edge-kit
 
+## 1.1.0
+
+### Minor Changes
+
+- add advanced filter methods and refactor query builders
+
 ## 1.0.0
 
 ### Major Changes
