@@ -1,5 +1,11 @@
 # supabase-edge-kit
 
+## 1.0.0
+
+### Major Changes
+
+- 6b48ef4: rename props
+
 ## 0.3.1
 
 ### Patch Changes
