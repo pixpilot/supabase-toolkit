@@ -1,5 +1,30 @@
 # supabase-camel
 
+<div style="border: 6px solid #f44336; padding: 10px; margin-bottom: 20px;">
+  <strong>⚠️ Warning:</strong> This package attempts to make Supabase accept and return camelCase, but may not be reliable. We have decided to go with a different approach:
+
+```typescript
+import { keysToCamelCase } from '@pixpilot/object';
+import { SupabaseClient } from '@supabase/supabase-js';
+
+export async function dbSelect<T>(
+  client: SupabaseClient,
+  table: string,
+  filters: Record<string, any> = {},
+): Promise<T[]> {
+  const { data, error } = await client
+    .from(table)
+    .select()
+    .match(keysToSnakeCase(filters));
+  if (error) throw error;
+  return keysToCamelCase(data) as T[];
+}
+```
+
+This keeps your business logic clean and schema-agnostic.
+
+</div>
+
 TypeScript utilities for Supabase with automatic camelCase/snake_case conversion. Keep your code camelCase while your database stays snake_case.
 
 ## Installation
