@@ -1,5 +1,11 @@
 # supabase-camel
 
+## 0.2.0
+
+### Minor Changes
+
+- Enhance performance and caching for supabase-camel
+
 ## 0.1.0
 
 ### Minor Changes
