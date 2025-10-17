@@ -1,5 +1,11 @@
 # supabase-camel
 
+## 0.1.0
+
+### Minor Changes
+
+- 2f0f366: new release
+
 ## 0.0.4
 
 ### Patch Changes
