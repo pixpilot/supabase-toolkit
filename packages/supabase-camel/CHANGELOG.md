@@ -1,5 +1,11 @@
 # supabase-camel
 
+## 0.3.0
+
+### Minor Changes
+
+- update README with new dbSelect function and usage details
+
 ## 0.2.0
 
 ### Minor Changes
