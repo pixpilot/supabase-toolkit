@@ -57,86 +57,11 @@ interface TestDatabase {
 // Helper function to create a mock table with chainable methods
 function createMockTable() {
   const mockTable: any = {
-    select: vi.fn().mockReturnValue(
-      Promise.resolve({
-        data: [
-          {
-            user_id: '123',
-            user_name: 'John Doe',
-            email_address: 'john@example.com',
-            is_active: true,
-          },
-        ],
-        error: null,
-        count: null,
-        status: 200,
-        statusText: 'OK',
-      }),
-    ),
-    insert: vi.fn().mockReturnValue(
-      Promise.resolve({
-        data: [
-          {
-            user_id: '456',
-            user_name: 'Jane Doe',
-            email_address: 'jane@example.com',
-            is_active: true,
-          },
-        ],
-        error: null,
-        count: null,
-        status: 201,
-        statusText: 'Created',
-      }),
-    ),
-    upsert: vi.fn().mockReturnValue(
-      Promise.resolve({
-        data: [
-          {
-            user_id: '789',
-            user_name: 'Bob Smith',
-            email_address: 'bob@example.com',
-            is_active: false,
-          },
-        ],
-        error: null,
-        count: null,
-        status: 201,
-        statusText: 'Created',
-      }),
-    ),
-    update: vi.fn().mockReturnValue(
-      Promise.resolve({
-        data: [
-          {
-            user_id: '123',
-            user_name: 'Updated User',
-            email_address: 'updated@example.com',
-            is_active: false,
-          },
-        ],
-        error: null,
-        count: null,
-        status: 200,
-        statusText: 'OK',
-      }),
-    ),
-    delete: vi.fn().mockReturnValue(
-      Promise.resolve({
-        data: [
-          {
-            user_id: '123',
-            user_name: 'Deleted User',
-            email_address: 'deleted@example.com',
-            is_active: true,
-          },
-        ],
-        error: null,
-        count: null,
-        status: 200,
-        statusText: 'OK',
-      }),
-    ),
+    select: vi.fn(),
+    insert: vi.fn(),
+    upsert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
     eq: vi.fn(),
     neq: vi.fn(),
     gt: vi.fn(),
@@ -169,6 +94,11 @@ function createMockTable() {
     range: vi.fn(),
     single: vi.fn(),
     maybeSingle: vi.fn(),
+    abortSignal: vi.fn(),
+    csv: vi.fn(),
+    geojson: vi.fn(),
+    explain: vi.fn(),
+    rollback: vi.fn(),
   };
 
   // Make all filter methods chainable
@@ -204,6 +134,70 @@ function createMockTable() {
   mockTable.range.mockReturnValue(mockTable);
   mockTable.single.mockReturnValue(mockTable);
   mockTable.maybeSingle.mockReturnValue(mockTable);
+  mockTable.abortSignal.mockReturnValue(mockTable);
+  mockTable.csv.mockReturnValue(mockTable);
+  mockTable.geojson.mockReturnValue(mockTable);
+  mockTable.explain.mockReturnValue(mockTable);
+  mockTable.rollback.mockReturnValue(mockTable);
+
+  // Make select, update, and delete chainable (return mockTable for chaining)
+  mockTable.select.mockReturnValue(mockTable);
+  mockTable.update.mockReturnValue(mockTable);
+  mockTable.delete.mockReturnValue(mockTable);
+
+  // Add 'then' method to make mockTable thenable (Promise-like)
+  mockTable.then = vi.fn(async (onfulfilled) => {
+    const result = {
+      data: [
+        {
+          user_id: '123',
+          user_name: 'John Doe',
+          email_address: 'john@example.com',
+          is_active: true,
+        },
+      ],
+      error: null,
+      count: null,
+      status: 200,
+      statusText: 'OK',
+    };
+    return onfulfilled ? onfulfilled(result) : result;
+  });
+
+  // insert and upsert return Promises directly (not chainable in Supabase)
+  mockTable.insert.mockReturnValue(
+    Promise.resolve({
+      data: [
+        {
+          user_id: '456',
+          user_name: 'Jane Doe',
+          email_address: 'jane@example.com',
+          is_active: true,
+        },
+      ],
+      error: null,
+      count: null,
+      status: 201,
+      statusText: 'Created',
+    }),
+  );
+
+  mockTable.upsert.mockReturnValue(
+    Promise.resolve({
+      data: [
+        {
+          user_id: '789',
+          user_name: 'Bob Smith',
+          email_address: 'bob@example.com',
+          is_active: false,
+        },
+      ],
+      error: null,
+      count: null,
+      status: 201,
+      statusText: 'Created',
+    }),
+  );
 
   return mockTable;
 }
@@ -302,7 +296,7 @@ describe('createCamelCaseDb', () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db.from('users').select();
 
-      expect(mockTable.select).toHaveBeenCalledWith(undefined);
+      expect(mockTable.select).toHaveBeenCalledWith();
       expect(result.data).toBeDefined();
     });
 
@@ -411,7 +405,7 @@ describe('createCamelCaseDb', () => {
       const db = createCamelCaseDb(mockSupabaseClient);
       await db.from('users').select('*').order('userId');
 
-      expect(mockTable.order).toHaveBeenCalledWith('user_id', undefined);
+      expect(mockTable.order).toHaveBeenCalledWith('user_id');
     });
 
     it('should support order with ascending option', async () => {
@@ -551,15 +545,12 @@ describe('createCamelCaseDb', () => {
         isActive: false,
       });
 
-      expect(mockTable.upsert).toHaveBeenCalledWith(
-        {
-          user_id: '789',
-          user_name: 'Bob Smith',
-          email_address: 'bob@example.com',
-          is_active: false,
-        },
-        undefined,
-      );
+      expect(mockTable.upsert).toHaveBeenCalledWith({
+        user_id: '789',
+        user_name: 'Bob Smith',
+        email_address: 'bob@example.com',
+        is_active: false,
+      });
       expect(result.data).toEqual([
         {
           userId: '789',
@@ -622,13 +613,10 @@ describe('createCamelCaseDb', () => {
         { userId: '2', userName: 'User 2', emailAddress: 'user2@example.com' },
       ]);
 
-      expect(mockTable.upsert).toHaveBeenCalledWith(
-        [
-          { user_id: '1', user_name: 'User 1', email_address: 'user1@example.com' },
-          { user_id: '2', user_name: 'User 2', email_address: 'user2@example.com' },
-        ],
-        undefined,
-      );
+      expect(mockTable.upsert).toHaveBeenCalledWith([
+        { user_id: '1', user_name: 'User 1', email_address: 'user1@example.com' },
+        { user_id: '2', user_name: 'User 2', email_address: 'user2@example.com' },
+      ]);
     });
 
     it('should handle upsert with null data', async () => {
@@ -653,6 +641,25 @@ describe('createCamelCaseDb', () => {
 
   describe('update queries', () => {
     it('should update with eq filter', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Updated User',
+              email_address: 'updated@example.com',
+              is_active: false,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db
         .from('users')
@@ -691,15 +698,17 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle update with null data', async () => {
-      mockTable.update.mockReturnValue(
-        Promise.resolve({
+      // Set up mock to return null data
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
           data: null,
           error: { message: 'Update failed' },
           count: null,
           status: 400,
           statusText: 'Bad Request',
-        }),
-      );
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
 
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db.from('jobs').update({ isActive: false }).eq('jobId', '999');
@@ -708,6 +717,25 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle update with onfulfilled callback', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Updated User',
+              email_address: 'updated@example.com',
+              is_active: false,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const query = db.from('jobs').update({ isActive: false }).eq('jobId', '123');
 
@@ -728,6 +756,25 @@ describe('createCamelCaseDb', () => {
 
   describe('delete queries', () => {
     it('should delete with eq filter', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Deleted User',
+              email_address: 'deleted@example.com',
+              is_active: true,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db.from('users').delete().eq('userId', '123');
 
@@ -744,15 +791,17 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle delete with null data', async () => {
-      mockTable.delete.mockReturnValue(
-        Promise.resolve({
+      // Set up mock to return null data
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
           data: null,
           error: { message: 'Delete failed' },
           count: null,
           status: 400,
           statusText: 'Bad Request',
-        }),
-      );
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
 
       const db = createCamelCaseDb(mockSupabaseClient);
       const result = await db.from('users').delete().eq('userId', '999');
@@ -761,6 +810,25 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle delete with onfulfilled callback', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Deleted User',
+              email_address: 'deleted@example.com',
+              is_active: true,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const query = db.from('users').delete().eq('userId', '123');
 
@@ -890,7 +958,6 @@ describe('createCamelCaseDb', () => {
         expect(mockTable.textSearch).toHaveBeenCalledWith(
           'short_description',
           'developer',
-          undefined,
         );
       });
 
@@ -987,7 +1054,6 @@ describe('createCamelCaseDb', () => {
 
         expect(mockTable.or).toHaveBeenCalledWith(
           'user_name.eq.John,email_address.eq.john@example.com',
-          undefined,
         );
       });
 
@@ -1062,7 +1128,7 @@ describe('createCamelCaseDb', () => {
 
         expect(mockTable.rangeGt).toHaveBeenCalledWith('user_id', '[1,10)');
         expect(mockTable.rangeLte).toHaveBeenCalledWith('user_id', '[50,100)');
-        expect(mockTable.order).toHaveBeenCalledWith('user_id', undefined);
+        expect(mockTable.order).toHaveBeenCalledWith('user_id');
       });
 
       it('should support chaining with not and or filters', async () => {
@@ -1074,10 +1140,7 @@ describe('createCamelCaseDb', () => {
           .or('user_name.eq.John,user_name.eq.Jane');
 
         expect(mockTable.not).toHaveBeenCalledWith('is_active', 'is', false);
-        expect(mockTable.or).toHaveBeenCalledWith(
-          'user_name.eq.John,user_name.eq.Jane',
-          undefined,
-        );
+        expect(mockTable.or).toHaveBeenCalledWith('user_name.eq.John,user_name.eq.Jane');
       });
     });
 
@@ -1130,7 +1193,6 @@ describe('createCamelCaseDb', () => {
         ]);
         expect(mockTable.or).toHaveBeenCalledWith(
           'is_active.is.false,created_at.lt.2020-01-01',
-          undefined,
         );
       });
 
@@ -1146,6 +1208,117 @@ describe('createCamelCaseDb', () => {
           user_name: 'Deleted User',
         });
       });
+    });
+  });
+
+  describe('transform methods', () => {
+    it('should support abortSignal', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      const controller = new AbortController();
+      await db.from('users').select('*').abortSignal(controller.signal);
+
+      expect(mockTable.abortSignal).toHaveBeenCalledWith(controller.signal);
+    });
+
+    it('should support csv', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').csv();
+
+      expect(mockTable.csv).toHaveBeenCalled();
+    });
+
+    it('should support geojson', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').geojson();
+
+      expect(mockTable.geojson).toHaveBeenCalled();
+    });
+
+    it('should support explain without options', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').explain();
+
+      expect(mockTable.explain).toHaveBeenCalledWith();
+    });
+
+    it('should support explain with options', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').explain({
+        analyze: true,
+        verbose: true,
+        format: 'json',
+      });
+
+      expect(mockTable.explain).toHaveBeenCalledWith({
+        analyze: true,
+        verbose: true,
+        format: 'json',
+      });
+    });
+
+    it('should support rollback on select query', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').eq('isActive', true).rollback();
+
+      expect(mockTable.rollback).toHaveBeenCalled();
+    });
+
+    it('should support order with foreignTable option', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').order('userId', {
+        ascending: false,
+        foreignTable: 'profiles',
+      });
+
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', {
+        ascending: false,
+        foreignTable: 'profiles',
+      });
+    });
+
+    it('should support order with referencedTable option', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').order('userId', {
+        ascending: true,
+        referencedTable: 'profiles',
+      });
+
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', {
+        ascending: true,
+        referencedTable: 'profiles',
+      });
+    });
+
+    it('should support limit with foreignTable option', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').limit(5, { foreignTable: 'posts' });
+
+      expect(mockTable.limit).toHaveBeenCalledWith(5, { foreignTable: 'posts' });
+    });
+
+    it('should support range with referencedTable option', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db.from('users').select('*').range(0, 9, { referencedTable: 'posts' });
+
+      expect(mockTable.range).toHaveBeenCalledWith(0, 9, { referencedTable: 'posts' });
+    });
+
+    it('should support chaining transform methods', async () => {
+      const db = createCamelCaseDb(mockSupabaseClient);
+      await db
+        .from('users')
+        .select('*')
+        .eq('isActive', true)
+        .order('userId', { ascending: false })
+        .limit(10)
+        .range(0, 9)
+        .single();
+
+      expect(mockTable.eq).toHaveBeenCalledWith('is_active', true);
+      expect(mockTable.order).toHaveBeenCalledWith('user_id', { ascending: false });
+      expect(mockTable.limit).toHaveBeenCalledWith(10);
+      expect(mockTable.range).toHaveBeenCalledWith(0, 9);
+      expect(mockTable.single).toHaveBeenCalled();
     });
   });
 
@@ -1167,6 +1340,25 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle update with null onfulfilled callback', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Updated User',
+              email_address: 'updated@example.com',
+              is_active: false,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const query = db.from('users').update({ isActive: false }).eq('userId', '123');
 
@@ -1183,6 +1375,25 @@ describe('createCamelCaseDb', () => {
     });
 
     it('should handle delete with null onfulfilled callback', async () => {
+      // Set up mock to return specific data for this test
+      mockTable.then = vi.fn(async (onfulfilled) => {
+        const result = {
+          data: [
+            {
+              user_id: '123',
+              user_name: 'Deleted User',
+              email_address: 'deleted@example.com',
+              is_active: true,
+            },
+          ],
+          error: null,
+          count: null,
+          status: 200,
+          statusText: 'OK',
+        };
+        return onfulfilled ? onfulfilled(result) : result;
+      });
+
       const db = createCamelCaseDb(mockSupabaseClient);
       const query = db.from('users').delete().eq('userId', '123');
 
@@ -1196,6 +1407,234 @@ describe('createCamelCaseDb', () => {
           isActive: true,
         },
       ]);
+    });
+  });
+
+  describe('proxy cache', () => {
+    let mockClient: any;
+
+    beforeEach(() => {
+      // Create a mock Supabase client
+      mockClient = {
+        from: vi.fn((_table: string) => ({
+          // Return a mock query builder
+          select: vi.fn(function (this: any, _columns: string) {
+            return this; // Return 'this' to simulate method chaining
+          }),
+          eq: vi.fn(function (this: any, _column: string, _value: any) {
+            return this;
+          }),
+          // Add a method that returns the same instance (important for cache testing)
+          throwOnError: vi.fn(function (this: any) {
+            return this; // Returns same object - this is where cache should help
+          }),
+        })),
+      } as unknown as SupabaseClient<any>;
+    });
+
+    describe('cache disabled (default)', () => {
+      it('should create new proxies for the same object when cache is disabled', () => {
+        const db = createCamelCaseDb(mockClient);
+
+        const query = db.from('users');
+
+        // Get the same underlying object multiple times
+        const proxy1 = query.throwOnError();
+        const proxy2 = query.throwOnError();
+
+        // Without cache, these should be different proxy instances
+        // (wrapping the same underlying object multiple times)
+        expect(proxy1).not.toBe(proxy2);
+      });
+    });
+
+    describe('cache enabled', () => {
+      it('should return the same proxy for the same query builder object', () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        const query = db.from('users');
+
+        // Get the same underlying object multiple times
+        const proxy1 = query.throwOnError();
+        const proxy2 = query.throwOnError();
+
+        // With cache enabled, these should be the SAME proxy instance
+        expect(proxy1).toBe(proxy2);
+      });
+
+      it('should create different proxies for different query builder objects', () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        // Create two different queries
+        const query1 = db.from('users');
+        const query2 = db.from('posts');
+
+        // These are different underlying objects, so proxies should be different
+        expect(query1).not.toBe(query2);
+      });
+
+      it('should prevent nested proxy wrapping', () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        const query = db.from('users');
+
+        // Chain methods that return 'this'
+        const result1 = query.throwOnError();
+        const result2 = result1.throwOnError();
+        const result3 = result2.throwOnError();
+
+        // All should reference the same proxy (no nesting)
+        expect(result1).toBe(result2);
+        expect(result2).toBe(result3);
+      });
+
+      it('should cache across different method calls on the same builder', () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        const query = db.from('users');
+
+        // Call different methods that return 'this'
+        const afterThrow = query.throwOnError();
+        const afterEq = query.eq('id', 1);
+
+        // Since the mock returns 'this', and cache is enabled,
+        // calling methods on the same builder should return cached proxies
+        expect(afterThrow).toBe(query);
+        expect(afterEq).toBe(query);
+      });
+    });
+
+    describe('cache performance', () => {
+      it('should not have excessive overhead with cache enabled', () => {
+        const iterations = 1000;
+
+        // Without cache
+        const dbNoCache = createCamelCaseDb(mockClient, { cacheProxies: false });
+        const startNoCache = performance.now();
+
+        for (let i = 0; i < iterations; i++) {
+          const query = dbNoCache.from('users');
+          query.throwOnError();
+          query.throwOnError();
+          query.throwOnError();
+        }
+
+        const timeNoCache = performance.now() - startNoCache;
+
+        // Reset mock
+        mockClient.from.mockClear();
+
+        // With cache
+        const dbWithCache = createCamelCaseDb(mockClient, { cacheProxies: true });
+        const startWithCache = performance.now();
+
+        for (let i = 0; i < iterations; i++) {
+          const query = dbWithCache.from('users');
+          query.throwOnError();
+          query.throwOnError();
+          query.throwOnError();
+        }
+
+        const timeWithCache = performance.now() - startWithCache;
+
+        console.log(`Without cache: ${timeNoCache.toFixed(2)}ms`);
+        console.log(`With cache: ${timeWithCache.toFixed(2)}ms`);
+        console.log(
+          `Difference: ${(((timeWithCache - timeNoCache) / timeNoCache) * 100).toFixed(1)}%`,
+        );
+
+        // Cache should not have excessive overhead (allow up to 50% slower)
+        // In real scenarios, cache provides benefits when same objects are reused
+        expect(timeWithCache).toBeLessThanOrEqual(timeNoCache * 1.5);
+      });
+    });
+
+    describe('weakmap garbage collection', () => {
+      it('should allow garbage collection of cached proxies', async () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        // Create a query and let it go out of scope
+        {
+          const query = db.from('users');
+          query.throwOnError();
+          // query goes out of scope here
+        }
+
+        // Force garbage collection if available (Node.js only)
+        if (globalThis.gc) {
+          globalThis.gc();
+        }
+
+        // Create a new query - should work fine
+        const newQuery = db.from('users');
+        expect(newQuery).toBeDefined();
+
+        // This test mainly verifies no errors occur
+        // WeakMap cleanup is automatic and invisible to us
+      });
+    });
+
+    describe('real-world scenario', () => {
+      it('should handle typical query chaining with cache enabled', () => {
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        // Typical query pattern
+        const query1 = db.from('users').select('*').eq('isActive', true);
+        const query2 = db.from('users').select('*').eq('isActive', true);
+
+        // Different query chains = different objects = different proxies
+        // (This is expected behavior)
+        expect(query1).not.toBe(query2);
+      });
+
+      it('should handle method that returns same instance with cache', () => {
+        // Mock a more realistic scenario where some methods return 'this'
+        const mockBuilder = {
+          select: vi.fn(function (this: any) {
+            return { ...this, _select: true }; // Returns new object
+          }),
+          throwOnError: vi.fn(function (this: any) {
+            return this; // Returns same object
+          }),
+        };
+
+        mockClient.from = vi.fn(() => mockBuilder);
+
+        const db = createCamelCaseDb(mockClient, { cacheProxies: true });
+
+        const query = db.from('users');
+        const withError1 = query.throwOnError();
+        const withError2 = query.throwOnError();
+
+        // Should return cached proxy
+        expect(withError1).toBe(withError2);
+      });
+    });
+
+    describe('cache option validation', () => {
+      it('should work with cacheProxies: true', () => {
+        expect(() => {
+          createCamelCaseDb(mockClient, { cacheProxies: true });
+        }).not.toThrow();
+      });
+
+      it('should work with cacheProxies: false', () => {
+        expect(() => {
+          createCamelCaseDb(mockClient, { cacheProxies: false });
+        }).not.toThrow();
+      });
+
+      it('should work with no options (default)', () => {
+        expect(() => {
+          createCamelCaseDb(mockClient);
+        }).not.toThrow();
+      });
+
+      it('should work with empty options object', () => {
+        expect(() => {
+          createCamelCaseDb(mockClient, {});
+        }).not.toThrow();
+      });
     });
   });
 });
