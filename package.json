@@ -41,7 +41,7 @@
     "@commitlint/config-conventional": "^20.0.0",
     "@internal/prettier-config": "workspace:*",
     "@pixpilot/dev-config": "catalog:dev",
-    "@pixpilot/workspace-package-generator": "^1.1.5",
+    "@pixpilot/workspace-package-generator": "^2.1.1",
     "@turbo/gen": "^2.5.8",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
