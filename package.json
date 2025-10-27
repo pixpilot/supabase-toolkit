@@ -56,7 +56,7 @@
     "eslint": "catalog:dev",
     "glob": "catalog:dev",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.4",
+    "lint-staged": "^16.2.6",
     "prettier": "catalog:dev",
     "rimraf": "^6.0.1",
     "tsx": "^4.20.6",
