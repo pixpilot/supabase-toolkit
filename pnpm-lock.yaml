@@ -68,8 +68,8 @@ importers:
         specifier: catalog:dev
         version: 3.6.0
       '@pixpilot/workspace-package-generator':
-        specifier: ^1.1.5
-        version: 1.1.5
+        specifier: ^2.1.1
+        version: 2.1.1
       '@turbo/gen':
         specifier: ^2.5.8
         version: 2.5.8(@types/node@22.18.10)(typescript@5.9.3)
@@ -826,6 +826,10 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
+  '@manypkg/get-packages@3.1.0':
+    resolution: {integrity: sha512-0TbBVyvPrP7xGYBI/cP8UP+yl/z+HtbTttAD7FMAJgn/kXOTwh5/60TsqP9ZYY710forNfyV0N8P/IE/ujGZJg==}
+    engines: {node: '>=20.0.0'}
+
   '@manypkg/tools@2.1.0':
     resolution: {integrity: sha512-0FOIepYR4ugPYaHwK7hDeHDkfPOBVvayt9QpvRbi2LT/h2b0GaE/gM9Gag7fsnyYyNaTZ2IGyOuVg07IYepvYQ==}
     engines: {node: '>=20.0.0'}
@@ -932,8 +936,8 @@ packages:
   '@pixpilot/string@1.0.1':
     resolution: {integrity: sha512-G5dd6GieB0+eD6W9DJ05CqEOmkVUEQbdstHCnEbfa8MuupRzsvYgLB3mDzCtZH3tQVAP3nCJjz94onFfcffM4w==}
 
-  '@pixpilot/workspace-package-generator@1.1.5':
-    resolution: {integrity: sha512-tfwuMQ9BOtKUq/XT+GMyyVog8/JgBTRgxpQ7clnDIOI7qpmkv6lMo9YeS9xCZ1QfUWJ5SIXpeO1AY7kOP/DjKQ==}
+  '@pixpilot/workspace-package-generator@2.1.1':
+    resolution: {integrity: sha512-ym5ALZYDzIsRItz5h+ggVlYyZi6gXdpolDrHDbUzwLUE1Ha/qWy2PmfXbaM2EqyLg3gk6CQFdrU/taMdIrp4/w==}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -4803,6 +4807,11 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
+  '@manypkg/get-packages@3.1.0':
+    dependencies:
+      '@manypkg/find-root': 3.1.0
+      '@manypkg/tools': 2.1.0
+
   '@manypkg/tools@2.1.0':
     dependencies:
       jju: 1.4.0
@@ -4928,9 +4937,10 @@ snapshots:
     dependencies:
       change-case: 5.4.4
 
-  '@pixpilot/workspace-package-generator@1.1.5':
+  '@pixpilot/workspace-package-generator@2.1.1':
     dependencies:
       '@manypkg/find-root': 3.1.0
+      '@manypkg/get-packages': 3.1.0
       change-case: 5.4.4
       yaml: 2.8.1
 

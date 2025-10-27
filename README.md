@@ -1,9 +1,57 @@
-# Supabase Toolkit
+# supabase-toolkit
 
-A collection of utilities for Supabase.
+> A modern TypeScript monorepo managed with pnpm and TurboRepo.
 
-## Packages
+## 🚀 Getting Started
 
-- [supabase-camel](./packages/supabase-camel/README.md) - TypeScript utilities for Supabase with automatic camelCase/snake_case conversion.
-- [supabase-edge-kit](./packages/supabase-edge-kit/README.md) - A lightweight, type-safe toolkit for building robust Supabase Edge Functions.
-- [supabase-user-storage](./packages/supabase-user-storage/README.md) - A user-scoped file storage manager for Supabase Storage.
+### Development
+
+Build all packages:
+
+```sh
+pnpm build
+```
+
+Run tests:
+
+```sh
+pnpm test
+```
+
+Lint and format:
+
+```sh
+pnpm lint
+pnpm format
+```
+
+### Create a New Package
+
+Generate a new package in the monorepo:
+
+```sh
+pnpm run turbo:gen:init
+```
+
+## 📦 Packages
+
+### [supabase-camel](./packages/supabase-camel/README.md)
+
+TypeScript utilities for Supabase with automatic camelCase/snake_case conversion.
+
+### [supabase-edge-kit](./packages/supabase-edge-kit/README.md)
+
+A lightweight, type-safe toolkit for building robust Supabase Edge Functions with built-in authentication, validation, error handling, and timeout protection
+
+### [supabase-user-storage](./packages/supabase-user-storage/README.md)
+
+A user-scoped file storage manager for Supabase Storage. Automatically handles user authentication and scopes all operations to the authenticated user's folder.
+
+
+## 🚢 Releases
+
+This project uses [Changesets](https://github.com/changesets/changesets) for version management and publishing.
+
+## 📄 License
+
+[MIT](LICENSE)

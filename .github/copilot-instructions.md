@@ -20,4 +20,4 @@ This project uses Vitest for testing.
 - **Frontend UI Components (React/Vue only):** Use PascalCase for component files (e.g., `MyButton.tsx`).
   - Example: `MyButton.tsx`, `UserProfile.vue`
 - **Config files:** Use kebab-case unless the framework or library has a different standard—follow the convention for that tool.
-  - Example: `tsconfig.json`, `rollup.config.js`
+  - Example: `tsconfig.json`

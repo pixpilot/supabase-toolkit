@@ -45,37 +45,6 @@ jobs:
 
       - name: Release
         uses: pixpilot/changesets-autopilot@v1
-        id: changeset
         with:
           GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Update README versions after successful release
-        if: steps.changeset.outputs.published == 'true'
-        run: |
-          # Get published packages and update their READMEs
-          echo "Updating README versions for published packages..."
-
-          # Check which packages exist and update their READMEs
-          for package in supabase-edge-kit supabase-camel supabase-user-storage; do
-            if [ -f "packages/$package/package.json" ]; then
-              echo "Updating $package README..."
-              node .github/scripts/update-readme-version.mjs "$package" || echo "⚠️  Failed to update $package README"
-            fi
-          done
-
-      - name: Commit and push README updates
-        if: steps.changeset.outputs.published == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Check if there are any changes to commit
-          if git diff --quiet; then
-            echo "No README changes to commit"
-          else
-            git add packages/*/README.md
-            git commit -m "docs: update README versions after release [skip ci]"
-            git push
-            echo "✅ README updates pushed to repository"
-          fi
