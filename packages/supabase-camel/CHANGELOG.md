@@ -1,5 +1,11 @@
 # supabase-camel
 
+## 0.4.0
+
+### Minor Changes
+
+- Update project structure and documentation
+
 ## 0.3.0
 
 ### Minor Changes
