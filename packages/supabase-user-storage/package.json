@@ -1,5 +1,5 @@
 {
-  "name": "supabase-user-storage",
+  "name": "@pixpilot/supabase-user-storage",
   "type": "module",
   "version": "0.1.2",
   "packageManager": "pnpm@10.18.3",

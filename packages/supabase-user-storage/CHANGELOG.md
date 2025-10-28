@@ -1,4 +1,4 @@
-# supabase-user-storage
+# @pixpilot/supabase-user-storage
 
 ## 0.1.2
 

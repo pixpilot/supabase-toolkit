@@ -50,7 +50,7 @@ const DEFAULT_OPTIONS: Omit<ServerOptions, 'createClient'> = {
  * ```typescript
  * import type { Database } from './database.types';
  * import { createClient } from '@supabase/supabase-js';
- * import { createServer } from 'supabase-edge-kit';
+ * import { createServer } from '@pixpilot/supabase-edge-kit';
  *
  * // Database type is inferred from createClient<Database>
  * createServer(async ({ request, user, client }) => {

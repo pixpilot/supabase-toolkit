@@ -1,4 +1,4 @@
-# supabase-edge-kit
+# @pixpilot/supabase-edge-kit
 
 ## 1.1.0
 
@@ -68,4 +68,4 @@
 
 ### Minor Changes
 
-- added supabase-edge-kit
+- added @pixpilot/supabase-edge-kit

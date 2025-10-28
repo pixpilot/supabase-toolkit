@@ -4,7 +4,7 @@ import { bench, describe } from 'vitest';
 import { createCamelCaseDb } from '../src/supabase-camel';
 
 /**
- * Performance benchmarks for supabase-camel
+ * Performance benchmarks for @pixpilot/supabase-camel
  *
  * These benchmarks measure the overhead of the proxy-based camelCase conversion.
  * Run with: pnpm vitest bench

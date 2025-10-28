@@ -1,4 +1,4 @@
-# supabase-camel
+# @pixpilot/supabase-camel
 
 ## 0.4.0
 
@@ -16,7 +16,7 @@
 
 ### Minor Changes
 
-- Enhance performance and caching for supabase-camel
+- Enhance performance and caching for @pixpilot/supabase-camel
 
 ## 0.1.0
 

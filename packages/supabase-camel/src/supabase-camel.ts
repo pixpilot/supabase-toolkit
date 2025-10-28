@@ -208,7 +208,7 @@ class CamelCaseDb<DB extends Record<string, any>> {
  * @example
  * ```typescript
  * import { createClient } from '@supabase/supabase-js';
- * import { createCamelCaseDb } from 'supabase-camel';
+ * import { createCamelCaseDb } from '@pixpilot/supabase-camel';
  *
  * const supabase = createClient(url, key);
  *
