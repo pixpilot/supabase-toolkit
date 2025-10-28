@@ -11,9 +11,9 @@ catalogs:
     eslint: ^9.37.0
     glob: ^11.0.3
     prettier: ^3.6.2
-    rollup: ^4.52.4
     typescript: ^5.9.3
     vitest: ^3.2.4
+    tsdown: ^0.15.8
   prod:
     '@pixpilot/object': ^1.0.3
   peer:

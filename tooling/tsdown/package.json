@@ -1,5 +1,5 @@
 {
-  "name": "@internal/rollup-config",
+  "name": "@internal/tsdown-config",
   "type": "module",
   "version": "0.1.0",
   "private": true,
@@ -16,7 +16,8 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
   "dependencies": {
-    "@pixpilot/rollup-config": "^0.2.0"
+    "@pixpilot/tsdown-config": "^0.3.0",
+    "tsdown": "catalog:dev"
   },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
@@ -24,7 +25,6 @@
     "@pixpilot/dev-config": "catalog:dev",
     "@types/node": "catalog:dev",
     "glob": "catalog:dev",
-    "rollup": "catalog:dev",
     "typescript": "catalog:dev"
   },
   "prettier": "@internal/prettier-config"

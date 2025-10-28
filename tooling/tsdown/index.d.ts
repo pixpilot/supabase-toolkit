@@ -1,4 +1,4 @@
-import type { defineConfig as DefineConfig } from '@pixpilot/rollup-config';
+import type { defineConfig as DefineConfig } from '@pixpilot/tsdown-config';
 
 export declare const defineConfig: typeof DefineConfig;
 

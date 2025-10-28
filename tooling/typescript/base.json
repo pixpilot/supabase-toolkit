@@ -7,5 +7,5 @@
     "outDir": "./dist",
     "types": ["vitest/globals"]
   },
-  "exclude": ["node_modules", "build", "coverage", ".rollup.cache", "dist"]
+  "exclude": ["node_modules", "build", "coverage", "dist"]
 }
