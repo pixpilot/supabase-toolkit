@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.1.3
+
+### Patch Changes
+
+- update README files to reflect package relocations
+
 ## 0.1.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @pixpilot/supabase-camel
 
+## 0.4.1
+
+### Patch Changes
+
+- update README files to reflect package relocations
+
 ## 0.4.0
 
 ### Minor Changes
