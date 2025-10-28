@@ -11,11 +11,11 @@ catalogs:
     eslint: ^9.37.0
     glob: ^11.0.3
     prettier: ^3.6.2
-    rollup: ^4.52.4
+    rollup: ^4.52.5
     typescript: ^5.9.3
     vitest: ^3.2.4
   prod:
     '@pixpilot/object': ^1.0.3
   peer:
     '@supabase/supabase-js': ^2.75.0
-    zod: 4.1.8
+    zod: 4.1.12
