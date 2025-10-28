@@ -16,7 +16,7 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
   "dependencies": {
-    "@pixpilot/rollup-config": "^0.2.0"
+    "@pixpilot/rollup-config": "^0.13.0"
   },
   "devDependencies": {
     "@internal/eslint-config": "workspace:*",
