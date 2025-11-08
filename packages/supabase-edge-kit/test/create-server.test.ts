@@ -319,7 +319,26 @@ describe('createServer', () => {
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Something went wrong', 500, {
+    // Should return generic error message to avoid leaking sensitive info
+    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500, {
+      ...defaultResponseHeaders,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    });
+  });
+
+  it('should not expose sensitive error messages to client', async () => {
+    // This test ensures that sensitive errors like authentication failures,
+    const sensitiveError = new Error('Sensitive errors');
+
+    mockCallback.mockRejectedValue(sensitiveError);
+
+    createServer(mockCallback, { createClient: mockCreateClient });
+
+    const handler = (globalThis as any).__testHandler;
+    const _response = await handler(mockRequest);
+
+    // Should return generic message instead of the sensitive error
+    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500, {
       ...defaultResponseHeaders,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
     });
@@ -452,7 +471,8 @@ describe('createServer', () => {
     const handler = (globalThis as any).__testHandler;
     const _response = await handler(mockRequest);
 
-    expect(createErrorResponse).toHaveBeenCalledWith('Sync error', 500, {
+    // Should return generic error message to avoid leaking sensitive info
+    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500, {
       ...defaultResponseHeaders,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
     });
@@ -700,7 +720,8 @@ describe('createServer', () => {
     const _response = await handler(mockRequest);
 
     expect(onError).toHaveBeenCalledWith(generalError);
-    expect(createErrorResponse).toHaveBeenCalledWith('General error', 500, {
+    // Should return generic error message to avoid leaking sensitive info
+    expect(createErrorResponse).toHaveBeenCalledWith('Internal server error', 500, {
       ...defaultResponseHeaders,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
     });

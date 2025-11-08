@@ -44,7 +44,7 @@ const DEFAULT_OPTIONS: Omit<ServerOptions, 'createClient'> = {
  * The Database type is automatically inferred from the createClient function
  *
  * @param callback - The main logic function to execute
- * @param configurations - Configuration options for the server
+ * @param options - Configuration options for the server
  *
  * @example
  * ```typescript
@@ -66,7 +66,7 @@ const DEFAULT_OPTIONS: Omit<ServerOptions, 'createClient'> = {
 // Overload 1: Explicit Database type with authenticate: true (or default)
 export function createServer<TDatabase = any>(
   callback: ServerCallback<TDatabase, true>,
-  configurations: ServerOptions<TDatabase> & { authenticate?: true },
+  options: ServerOptions<TDatabase> & { authenticate?: true },
 ): void;
 
 // Overload 2: Explicit Database type with authenticate: false
@@ -130,9 +130,12 @@ export function createServer<TDatabase = any>(
       }
 
       // Handle other errors
+      // Log the actual error server-side for debugging
       console.error('Server error:', error);
+
+      // Return generic error message to client to avoid leaking sensitive information
       return createErrorResponse(
-        error instanceof Error ? error.message : 'Internal server error',
+        'Internal server error',
         HTTP_STATUS_INTERNAL_SERVER_ERROR,
         config.headers,
       );
