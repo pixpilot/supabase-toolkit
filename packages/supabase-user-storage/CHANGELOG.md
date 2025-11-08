@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.2.0
+
+### Minor Changes
+
+- update package names to include scope
+
 ## 0.1.3
 
 ### Patch Changes
