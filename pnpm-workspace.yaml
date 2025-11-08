@@ -18,4 +18,4 @@ catalogs:
     '@pixpilot/object': ^1.0.3
   peer:
     '@supabase/supabase-js': ^2.75.0
-    zod: 4.1.8
+    zod: 4.1.12
