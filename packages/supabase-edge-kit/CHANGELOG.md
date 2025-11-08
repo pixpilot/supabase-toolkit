@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.0
+
+### Minor Changes
+
+- remove rollup tooling and introduce tsdown configuration
+
 ## 1.1.0
 
 ### Minor Changes
