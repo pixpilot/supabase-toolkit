@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.3.0
+
+### Minor Changes
+
+- remove rollup tooling and introduce tsdown configuration
+
 ## 0.2.0
 
 ### Minor Changes
