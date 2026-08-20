@@ -47,6 +47,10 @@ A lightweight, type-safe toolkit for building robust Supabase Edge Functions wit
 
 A client library for Supabase Functions, providing a simple and efficient way to interact with serverless functions deployed on the Supabase platform.
 
+### [supabase-functions-proxy](./packages/supabase-functions-proxy/README.md)
+
+A Fetch API proxy handler for securely forwarding application routes to Supabase Edge Functions.
+
 ### [supabase-user-storage](./packages/supabase-user-storage/README.md)
 
 A user-scoped file storage manager for Supabase Storage. Automatically handles user authentication and scopes all operations to the authenticated user's folder.
