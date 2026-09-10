@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-client
 
+## 0.2.1
+
+### Patch Changes
+
+- a6fadea: fix ci
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.3.1
+
+### Patch Changes
+
+- a6fadea: fix ci
+
 ## 0.3.0
 
 ### Minor Changes

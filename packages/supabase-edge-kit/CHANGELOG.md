@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.1
+
+### Patch Changes
+
+- a6fadea: fix ci
+
 ## 1.2.0
 
 ### Minor Changes

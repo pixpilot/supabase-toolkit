@@ -1,5 +1,12 @@
 # @pixpilot/supabase-camel
 
+## 1.0.1
+
+### Patch Changes
+
+- update workflow reference in README
+- a6fadea: fix ci
+
 ## 1.0.0
 
 ### Major Changes
