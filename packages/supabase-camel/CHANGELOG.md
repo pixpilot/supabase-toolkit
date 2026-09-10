@@ -1,5 +1,12 @@
 # @pixpilot/supabase-camel
 
+## 1.0.3
+
+### Patch Changes
+
+- update workflow reference in README
+- 613a53e: fix node version
+
 ## 1.0.2
 
 ### Patch Changes

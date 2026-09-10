@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.3
+
+### Patch Changes
+
+- 613a53e: fix node version
+
 ## 1.2.2
 
 ### Patch Changes

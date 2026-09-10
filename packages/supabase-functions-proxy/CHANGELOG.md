@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-proxy
 
+## 0.1.3
+
+### Patch Changes
+
+- 613a53e: fix node version
+
 ## 0.1.2
 
 ### Patch Changes
