@@ -11,6 +11,9 @@
     "url": "https://github.com/pixpilot/supabase-toolkit.git",
     "directory": "packages/supabase-user-storage"
   },
+  "bugs": {
+    "url": "https://github.com/pixpilot/supabase-toolkit/issues"
+  },
   "keywords": [],
   "exports": "./src/index.ts",
   "files": [
