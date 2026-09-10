@@ -60,7 +60,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   backup:
-    uses: pixpilot/supabase-backup/.github/workflows/backup.yml@v1
+    uses: pixpilot/supabase-toolkit/.github/workflows/backup.yml@main
     with:
       backup-prefix: production/database
       age-recipient: ${{ vars.BACKUP_AGE_RECIPIENT }}

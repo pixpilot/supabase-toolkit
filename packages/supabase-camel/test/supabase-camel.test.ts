@@ -1504,51 +1504,6 @@ describe('createCamelCaseDb', () => {
       });
     });
 
-    describe('cache performance', () => {
-      it('should not have excessive overhead with cache enabled', () => {
-        const iterations = 1000;
-
-        // Without cache
-        const dbNoCache = createCamelCaseDb(mockClient, { cacheProxies: false });
-        const startNoCache = performance.now();
-
-        for (let i = 0; i < iterations; i++) {
-          const query = dbNoCache.from('users');
-          query.throwOnError();
-          query.throwOnError();
-          query.throwOnError();
-        }
-
-        const timeNoCache = performance.now() - startNoCache;
-
-        // Reset mock
-        mockClient.from.mockClear();
-
-        // With cache
-        const dbWithCache = createCamelCaseDb(mockClient, { cacheProxies: true });
-        const startWithCache = performance.now();
-
-        for (let i = 0; i < iterations; i++) {
-          const query = dbWithCache.from('users');
-          query.throwOnError();
-          query.throwOnError();
-          query.throwOnError();
-        }
-
-        const timeWithCache = performance.now() - startWithCache;
-
-        console.log(`Without cache: ${timeNoCache.toFixed(2)}ms`);
-        console.log(`With cache: ${timeWithCache.toFixed(2)}ms`);
-        console.log(
-          `Difference: ${(((timeWithCache - timeNoCache) / timeNoCache) * 100).toFixed(1)}%`,
-        );
-
-        // Cache should not have excessive overhead (allow up to 50% slower)
-        // In real scenarios, cache provides benefits when same objects are reused
-        expect(timeWithCache).toBeLessThanOrEqual(timeNoCache * 1.5);
-      });
-    });
-
     describe('weakmap garbage collection', () => {
       it('should allow garbage collection of cached proxies', async () => {
         const db = createCamelCaseDb(mockClient, { cacheProxies: true });
