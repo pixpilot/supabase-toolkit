@@ -143,6 +143,45 @@ importers:
         specifier: catalog:dev
         version: 5.9.3
 
+  packages/supabase-backup:
+    devDependencies:
+      '@internal/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@internal/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@internal/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@internal/tsdown-config':
+        specifier: workspace:*
+        version: link:../../tooling/tsdown
+      '@internal/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
+      '@types/node':
+        specifier: catalog:dev
+        version: 22.18.10
+      '@vitest/coverage-v8':
+        specifier: catalog:dev
+        version: 3.2.4(vitest@3.2.4)
+      '@vitest/ui':
+        specifier: catalog:dev
+        version: 3.2.4(vitest@3.2.4)
+      eslint:
+        specifier: catalog:dev
+        version: 9.37.0(jiti@2.6.1)
+      tsdown:
+        specifier: catalog:dev
+        version: 0.15.11(typescript@5.9.3)
+      typescript:
+        specifier: catalog:dev
+        version: 5.9.3
+      vitest:
+        specifier: catalog:dev
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.10)(@vitest/ui@3.2.4)(happy-dom@16.8.1)(jiti@2.6.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
+
   packages/supabase-camel:
     dependencies:
       '@pixpilot/object':
@@ -2315,6 +2354,7 @@ packages:
   eslint@9.37.0:
     resolution: {integrity: sha512-XyLmROnACWqSxiGYArdef1fItQd47weqB7iwtfr9JHwRrqIXZdcFMvvEcL9xHCmL0SNsOvF0c42lWyM1U5dgig==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

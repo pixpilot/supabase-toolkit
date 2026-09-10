@@ -40,7 +40,8 @@
     "deps:update:major": "npx taze major -r -w && pnpm install",
     "gen:package": "npx @pixpilot/scaffoldfy --config ./generators/package/scaffoldfy.json",
     "changeset": "changeset",
-    "generate-packages-section": "node scripts/generate-packages-section.js"
+    "generate-packages-section": "node scripts/generate-packages-section.js",
+    "agent:start": "wt -d . pwsh -NoExit -Command npx @pixpilot/coding-agent-sandbox"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
