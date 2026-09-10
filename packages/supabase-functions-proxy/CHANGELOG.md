@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-proxy
 
+## 0.1.4
+
+### Patch Changes
+
+- 8005fc3: fix repo url
+
 ## 0.1.3
 
 ### Patch Changes

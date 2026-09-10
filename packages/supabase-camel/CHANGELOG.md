@@ -1,5 +1,13 @@
 # @pixpilot/supabase-camel
 
+## 1.0.4
+
+### Patch Changes
+
+- update repository and bugs URLs in package.json
+- update workflow reference in README
+- 8005fc3: fix repo url
+
 ## 1.0.3
 
 ### Patch Changes

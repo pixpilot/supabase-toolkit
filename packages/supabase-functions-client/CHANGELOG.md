@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-client
 
+## 0.2.4
+
+### Patch Changes
+
+- 8005fc3: fix repo url
+
 ## 0.2.3
 
 ### Patch Changes
