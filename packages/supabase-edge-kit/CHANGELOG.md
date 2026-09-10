@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.5
+
+### Patch Changes
+
+- add bugs URL to package.json
+
 ## 1.2.4
 
 ### Patch Changes
