@@ -46,5 +46,6 @@ jobs:
       - name: Release
         uses: pixpilot/changesets-autopilot@v1
         with:
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          provenance: 'true'
+
