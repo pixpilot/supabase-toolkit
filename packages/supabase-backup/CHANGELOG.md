@@ -1,5 +1,17 @@
 # @pixpilot/supabase-backup
 
+## 1.6.0
+
+### Minor Changes
+
+- implement backup workflows
+- scaffold backup package
+
+### Patch Changes
+
+- update workflow reference in README
+- 8005fc3: fix repo url
+
 ## 1.5.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.4
+
+### Patch Changes
+
+- 8005fc3: fix repo url
+
 ## 1.2.3
 
 ### Patch Changes

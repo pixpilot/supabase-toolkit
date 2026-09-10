@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.3.4
+
+### Patch Changes
+
+- 8005fc3: fix repo url
+
 ## 0.3.3
 
 ### Patch Changes
