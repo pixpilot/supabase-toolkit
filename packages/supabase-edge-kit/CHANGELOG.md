@@ -1,5 +1,11 @@
 # @pixpilot/supabase-edge-kit
 
+## 1.2.2
+
+### Patch Changes
+
+- b40249b: fix for ci
+
 ## 1.2.1
 
 ### Patch Changes

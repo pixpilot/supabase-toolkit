@@ -1,5 +1,17 @@
 # @pixpilot/supabase-backup
 
+## 1.4.0
+
+### Minor Changes
+
+- implement backup workflows
+- scaffold backup package
+
+### Patch Changes
+
+- update workflow reference in README
+- b40249b: fix for ci
+
 ## 1.3.0
 
 ### Minor Changes

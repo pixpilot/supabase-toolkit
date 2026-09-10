@@ -1,5 +1,12 @@
 # @pixpilot/supabase-camel
 
+## 1.0.2
+
+### Patch Changes
+
+- update workflow reference in README
+- b40249b: fix for ci
+
 ## 1.0.1
 
 ### Patch Changes
