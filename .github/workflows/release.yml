@@ -1,5 +1,3 @@
-# .github/workflows/release.yml
-
 name: Release Package
 
 on:
@@ -46,6 +44,5 @@ jobs:
       - name: Release
         uses: pixpilot/changesets-autopilot@v1
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
           provenance: 'true'
-
