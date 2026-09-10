@@ -1,5 +1,15 @@
 # @pixpilot/supabase-camel
 
+## 1.0.0
+
+### Major Changes
+
+- e17cb0d: ci test
+
+### Patch Changes
+
+- update workflow reference in README
+
 ## 0.4.3
 
 ### Patch Changes
