@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.3.2
+
+### Patch Changes
+
+- b40249b: fix for ci
+
 ## 0.3.1
 
 ### Patch Changes

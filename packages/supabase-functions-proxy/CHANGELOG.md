@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-proxy
 
+## 0.1.2
+
+### Patch Changes
+
+- b40249b: fix for ci
+
 ## 0.1.1
 
 ### Patch Changes

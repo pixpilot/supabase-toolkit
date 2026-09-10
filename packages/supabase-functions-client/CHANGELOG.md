@@ -1,5 +1,11 @@
 # @pixpilot/supabase-functions-client
 
+## 0.2.2
+
+### Patch Changes
+
+- b40249b: fix for ci
+
 ## 0.2.1
 
 ### Patch Changes
