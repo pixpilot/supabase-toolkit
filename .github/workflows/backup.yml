@@ -1,0 +1,48 @@
+name: Supabase backup
+
+on:
+  workflow_call:
+    inputs:
+      backup-prefix: {required: true, type: string}
+      age-recipient: {required: true, type: string}
+      r2-endpoint: {required: true, type: string}
+      r2-bucket: {required: true, type: string}
+      max-age-hours: {required: false, default: 36, type: number}
+      package-version: {required: true, type: string}
+    secrets:
+      database-url: {required: true}
+      r2-access-key-id: {required: true}
+      r2-secret-access-key: {required: true}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install PostgreSQL client and age
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client age
+      - name: Create encrypted backup
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.database-url }}
+          BACKUP_AGE_RECIPIENT: ${{ inputs.age-recipient }}
+          R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
+          R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+          R2_BUCKET: ${{ inputs.r2-bucket }}
+          BACKUP_PREFIX: ${{ inputs.backup-prefix }}
+        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} backup
+      - name: Verify backup health
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
+          R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+          R2_BUCKET: ${{ inputs.r2-bucket }}
+          BACKUP_PREFIX: ${{ inputs.backup-prefix }}
+        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} status --max-age-hours ${{ inputs.max-age-hours }}

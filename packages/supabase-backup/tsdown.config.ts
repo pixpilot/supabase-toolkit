@@ -1,7 +1,7 @@
 import { defineConfig } from '@internal/tsdown-config';
 
 export default defineConfig({
-  entry: 'src/index.ts',
+  entry: ['src/index.ts', 'src/cli.ts'],
   dts: true,
   minify: false,
   clean: true,
@@ -9,5 +9,5 @@ export default defineConfig({
   // (Next.js, Vite, etc.) can dead-code-eliminate dev-only guards in production.
   // A `browser` platform would inline it at build time, making dev-only code run
   // unconditionally in shipped bundles.
-  platform: 'neutral',
+  platform: 'node',
 });

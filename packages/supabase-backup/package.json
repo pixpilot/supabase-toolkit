@@ -1,7 +1,7 @@
 {
   "name": "@pixpilot/supabase-backup",
   "type": "module",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "packageManager": "pnpm@10.17.0",
   "author": "Mo Doaie <m.doaie@hotmail.com>",
   "license": "MIT",
@@ -17,6 +17,9 @@
   "keywords": [],
   "sideEffects": false,
   "exports": "./src/index.ts",
+  "bin": {
+    "supabase-backup": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
@@ -48,13 +51,19 @@
     "lint": "eslint",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1129.0",
+    "pg": "^8.23.0"
+  },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@internal/eslint-config": "workspace:*",
     "@internal/prettier-config": "workspace:*",
     "@internal/tsconfig": "workspace:*",
     "@internal/tsdown-config": "workspace:*",
     "@internal/vitest-config": "workspace:*",
     "@types/node": "catalog:dev",
+    "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "catalog:dev",
     "@vitest/ui": "catalog:dev",
     "eslint": "catalog:dev",
