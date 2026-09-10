@@ -1,5 +1,11 @@
 # @pixpilot/supabase-user-storage
 
+## 0.3.5
+
+### Patch Changes
+
+- add bugs URL to package.json
+
 ## 0.3.4
 
 ### Patch Changes
