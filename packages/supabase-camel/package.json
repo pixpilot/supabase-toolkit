@@ -6,6 +6,15 @@
   "description": "TypeScript utilities for Supabase with automatic camelCase/snake_case conversion.",
   "author": "",
   "license": "MIT",
+  "homepage": "https://github.com/pixpilot/supabase-toolkit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pixpilot/supabase-toolkit.git",
+    "directory": "packages/supabase-camel"
+  },
+  "bugs": {
+    "url": "https://github.com/pixpilot/supabase-toolkit/issues"
+  },
   "keywords": [],
   "exports": "./src/index.ts",
   "files": [
