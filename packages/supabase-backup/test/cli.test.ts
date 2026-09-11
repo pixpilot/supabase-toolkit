@@ -4,12 +4,14 @@ import type { Prompter, TextPromptOptions } from '../src/prompt.js';
 import type { ObjectStore } from '../src/r2.js';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
+import { preflightFailureMessage } from '../src/auth.js';
 import {
   inputFromArguments,
   parseArguments,
   planCommand,
   usage,
 } from '../src/command-line.js';
+import { parseDatabaseUrl, restoreTargetRef } from '../src/database-url.js';
 import { BackupError } from '../src/errors.js';
 import {
   backupFields,
@@ -22,7 +24,11 @@ import {
   statusFields,
 } from '../src/interactive.js';
 import { createPrompter, interactiveStreams, isInteractive } from '../src/prompt.js';
-import { appRestoreArguments, authRestoreArguments } from '../src/restore.js';
+import {
+  appRestoreArguments,
+  authRestoreArguments,
+  filterExistingSchemas,
+} from '../src/restore.js';
 
 /** The flags a fully specified run passes. */
 const connectionFlags: Record<string, string> = {
@@ -51,8 +57,13 @@ class StubPrompter implements Prompter {
     private readonly selections: number[] = [],
   ) {}
 
+  public readonly notes: string[] = [];
   public close(): void {
     this.closed = true;
+  }
+
+  public note(text: string): void {
+    this.notes.push(text);
   }
 
   public async text(question: string, options: TextPromptOptions = {}): Promise<string> {
@@ -276,27 +287,67 @@ describe('choosing a backup to restore', () => {
   });
 });
 
-describe('confirming a restore target', () => {
-  it('returns the label the operator retyped', async () => {
-    const prompter = new StubPrompter(['db.example.test:5432/postgres']);
-    await expect(
-      confirmRestoreTarget(
-        'postgresql://backup:secret@db.example.test:5432/postgres',
-        prompter,
+describe('naming a restore target', () => {
+  it('identifies a pooled Supabase project by the reference in its user', () => {
+    expect(
+      restoreTargetRef(
+        parseDatabaseUrl(
+          'postgresql://postgres.abcdefghijklmnopqrst:secret@aws-1-eu-west-1.pooler.supabase.com:5432/postgres',
+        ),
       ),
-    ).resolves.toBe('db.example.test:5432/postgres');
+    ).toBe('abcdefghijklmnopqrst');
   });
 
-  it('refuses a label that does not match the target exactly', async () => {
-    const prompter = new StubPrompter(['db.example.test:5432/wrong']);
-    await expect(
-      confirmRestoreTarget(
-        'postgresql://backup:secret@db.example.test:5432/postgres',
-        prompter,
+  it('identifies a direct Supabase project by its host', () => {
+    expect(
+      restoreTargetRef(
+        parseDatabaseUrl(
+          'postgresql://postgres:secret@db.abcdefghijklmnopqrst.supabase.co:5432/postgres',
+        ),
       ),
-    ).rejects.toThrow(
-      "Restore confirmation must exactly equal 'db.example.test:5432/postgres'.",
+    ).toBe('abcdefghijklmnopqrst');
+  });
+
+  it('falls back to the full label when no project reference exists', () => {
+    expect(
+      restoreTargetRef(
+        parseDatabaseUrl('postgresql://backup:secret@db.example.test:5432/recovery'),
+      ),
+    ).toBe('db.example.test:5432/recovery');
+  });
+});
+
+describe('confirming a restore target', () => {
+  const pooled =
+    'postgresql://postgres.abcdefghijklmnopqrst:secret@aws-1-eu-west-1.pooler.supabase.com:5432/postgres';
+
+  it('shows the target, names it in the question, and takes YES', async () => {
+    const prompter = new StubPrompter(['YES']);
+    await expect(confirmRestoreTarget(pooled, prompter)).resolves.toBe(
+      'abcdefghijklmnopqrst',
     );
+    expect(prompter.notes.join('\n')).toContain(
+      'aws-1-eu-west-1.pooler.supabase.com:5432/postgres',
+    );
+    expect(prompter.notes.join('\n')).toContain('postgres.abcdefghijklmnopqrst');
+    expect(prompter.asked[0]).toBe(
+      "Are you sure you want to restore into 'abcdefghijklmnopqrst'? Type YES to continue",
+    );
+  });
+
+  it('never shows the password of the target it prints', async () => {
+    const prompter = new StubPrompter(['YES']);
+    await confirmRestoreTarget(pooled, prompter);
+    expect(prompter.notes.join('\n')).not.toContain('secret');
+  });
+
+  it('refuses anything but YES in capitals', async () => {
+    for (const answer of ['yes', 'y', 'abcdefghijklmnopqrst']) {
+      const prompter = new StubPrompter([answer]);
+      await expect(confirmRestoreTarget(pooled, prompter)).rejects.toThrow(
+        "Type YES in capitals to restore into 'abcdefghijklmnopqrst'",
+      );
+    }
   });
 });
 
@@ -323,16 +374,35 @@ describe('planning a command', () => {
     expect(prompter.asked).toEqual(['age recipient used to encrypt (age1…)']);
   });
 
-  it('asks which backup to restore when --key is absent', async () => {
+  it('picks a backup, then asks for the target and its confirmation', async () => {
     const store = new MemoryStore();
     const key = 'production/database/v1/20260101T000000Z/manifest.json';
     store.values.set(key, Buffer.from('{}'));
-    const prompter = new StubPrompter([], [false], [0]);
+    const prompter = new StubPrompter(
+      [
+        'postgresql://postgres.abcdefghijklmnopqrst:secret@aws-1-eu-west-1.pooler.supabase.com:5432/postgres',
+        'YES',
+      ],
+      [],
+      [0],
+    );
     const run = await planCommand(args('restore', connectionFlags), prompter, { store });
     expect(prompter.asked).toEqual([
       'Select a backup to restore (newest first):',
-      'Apply this backup to the target database? It writes data.',
+      'Target database URL to restore into',
+      "Are you sure you want to restore into 'abcdefghijklmnopqrst'? Type YES to continue",
     ]);
+    expect(typeof run).toBe('function');
+  });
+
+  it('writes nothing without --apply when it cannot ask', async () => {
+    const run = await planCommand(
+      args('restore', {
+        ...connectionFlags,
+        '--key': 'production/database/v1/20260101T000000Z/manifest.json',
+      }),
+      undefined,
+    );
     expect(typeof run).toBe('function');
   });
 
@@ -365,7 +435,7 @@ describe('planning a command', () => {
         ),
         undefined,
       ),
-    ).rejects.toThrow("--apply requires --confirm-target '<host>:<port>/<database>'.");
+    ).rejects.toThrow('--apply requires --confirm-target');
   });
 
   it('reports usage for an unknown command', async () => {
@@ -382,7 +452,8 @@ describe('restoring into a database', () => {
       '--no-owner',
       '--no-privileges',
       '--exit-on-error',
-      '--table=auth.users',
+      '--schema=auth',
+      '--table=users',
       '/tmp/auth.dump',
     ]);
     expect(appRestoreArguments('postgres', '/tmp/app.dump')).toEqual([
@@ -395,9 +466,89 @@ describe('restoring into a database', () => {
     ]);
   });
 
+  it('skips creating a schema the target already has, and nothing else', () => {
+    const list = [
+      ';',
+      '; Archive created at 2026-09-11 13:10:38 UTC',
+      ';',
+      '4; 2615 2200 SCHEMA - public postgres',
+      '5; 2615 16398 SCHEMA - billing postgres',
+      '218; 1259 16399 TABLE public user_roles postgres',
+      '3456; 0 16399 TABLE DATA public user_roles postgres',
+      '3460; 3256 16420 POLICY public user_roles Allow auth admin postgres',
+    ].join('\n');
+    const filtered = filterExistingSchemas(list, ['public']);
+    expect(filtered).not.toContain('SCHEMA - public');
+    expect(filtered).toContain('SCHEMA - billing');
+    expect(filtered).toContain('TABLE public user_roles');
+    expect(filtered).toContain('TABLE DATA public user_roles');
+    expect(filtered).toContain('POLICY public user_roles');
+  });
+
+  it('leaves the table of contents alone when no schema exists yet', () => {
+    const list = '4; 2615 2200 SCHEMA - public postgres\n';
+    expect(filterExistingSchemas(list, [])).toBe(list);
+    expect(filterExistingSchemas(list, ['billing'])).toBe(list);
+  });
+
+  it('uses a filtered list only when one was written', () => {
+    expect(appRestoreArguments('postgres', '/tmp/app.dump', '/tmp/app.list')).toContain(
+      '--use-list',
+    );
+    expect(appRestoreArguments('postgres', '/tmp/app.dump')).not.toContain('--use-list');
+  });
+
+  it('never qualifies the table name, which pg_restore would match against nothing', () => {
+    const selected = authRestoreArguments(
+      'postgres',
+      'auth.identities',
+      '/tmp/auth.dump',
+    );
+    expect(selected).toContain('--table=identities');
+    expect(selected).not.toContain('--table=auth.identities');
+    expect(selected).toContain('--schema=auth');
+    expect(() => authRestoreArguments('postgres', 'users', '/tmp/auth.dump')).toThrow(
+      'must be schema-qualified',
+    );
+  });
+
   it('never cleans, because a clean cannot work on a fresh database', () => {
     expect(appRestoreArguments('postgres', '/tmp/app.dump')).not.toContain('--clean');
     expect(appRestoreArguments('postgres', '/tmp/app.dump')).not.toContain('--if-exists');
+  });
+});
+
+describe('diagnosing a failed preflight connection', () => {
+  const target = parseDatabaseUrl(
+    'postgresql://postgres:secret@db.abcdefghijklm.supabase.co:5432/postgres',
+  );
+
+  it('names the target and the driver reason, without the credentials', () => {
+    const message = preflightFailureMessage(
+      target,
+      Object.assign(new Error('password authentication failed for user "postgres"'), {
+        code: '28P01',
+      }),
+    );
+    expect(message).toContain('db.abcdefghijklm.supabase.co:5432/postgres');
+    expect(message).toContain('password authentication failed');
+    expect(message).not.toContain('secret');
+  });
+
+  it('points at the session pooler when a direct Supabase host is unreachable', () => {
+    const message = preflightFailureMessage(
+      target,
+      Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH' }),
+    );
+    expect(message).toContain('Session Pooler');
+  });
+
+  it('adds no hint when the host answered', () => {
+    const message = preflightFailureMessage(
+      target,
+      Object.assign(new Error('database "postgres" does not exist'), { code: '3D000' }),
+    );
+    expect(message).not.toContain('Session Pooler');
   });
 });
 

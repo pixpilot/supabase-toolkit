@@ -1,6 +1,6 @@
 import type { Prompter } from './prompt.js';
 import type { ObjectStore } from './r2.js';
-import { databaseLabel, parseDatabaseUrl } from './database-url.js';
+import { databaseLabel, parseDatabaseUrl, restoreTargetRef } from './database-url.js';
 import { BackupError } from './errors.js';
 import { backupKeyLayoutVersion, manifestObjectName } from './manifest.js';
 import { listManifestKeys } from './status.js';
@@ -228,16 +228,38 @@ export async function chooseManifestKey(
   return prompter.text('Manifest key', { validate: ensureValidManifestKey });
 }
 
-/** Requires the operator to retype the target label before a destructive apply. */
+/** The word that has to be typed out before a restore writes anything. */
+const confirmationWord = 'YES';
+
+/**
+ * Shows what is about to be overwritten, then asks for a deliberate yes.
+ *
+ * The target is printed rather than retyped: a Supabase pooler host is shared by
+ * every project in its region, so retyping it would confirm nothing, and the
+ * project reference on screen is what says which database this is. Typing a word
+ * in full is the part a reflex keypress cannot do.
+ *
+ * Returns the reference, which is what `--confirm-target` carries when the same
+ * restore runs unattended.
+ */
 export async function confirmRestoreTarget(
   targetUrl: string,
   prompter: Prompter,
 ): Promise<string> {
-  const label = databaseLabel(parseDatabaseUrl(targetUrl));
-  return prompter.text(`Type '${label}' to confirm the restore target`, {
-    validate: (value: string): void => {
-      if (value !== label)
-        throw new BackupError(`Restore confirmation must exactly equal '${label}'.`);
+  const connection = parseDatabaseUrl(targetUrl);
+  const reference = restoreTargetRef(connection);
+  prompter.note(`Restore target: ${databaseLabel(connection)}`);
+  prompter.note(`                user ${connection.user}`);
+  await prompter.text(
+    `Are you sure you want to restore into '${reference}'? Type ${confirmationWord} to continue`,
+    {
+      validate: (value: string): void => {
+        if (value !== confirmationWord)
+          throw new BackupError(
+            `Type ${confirmationWord} in capitals to restore into '${reference}', or press Ctrl-C to stop.`,
+          );
+      },
     },
-  });
+  );
+  return reference;
 }

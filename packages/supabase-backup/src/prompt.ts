@@ -28,6 +28,7 @@ export interface TextPromptOptions {
 export interface Prompter {
   close: () => void;
   confirm: (question: string, defaultValue?: boolean) => Promise<boolean>;
+  note: (text: string) => void;
   select: (question: string, choices: readonly string[]) => Promise<number>;
   text: (question: string, options?: TextPromptOptions) => Promise<string>;
 }
@@ -171,7 +172,8 @@ class ReadlinePrompter implements Prompter {
     process.kill(process.pid, 'SIGINT');
   }
 
-  private note(text: string): void {
+  /** Writes a line that is context for the next question, not a question. */
+  public note(text: string): void {
     this.streams.output.write(`${text}\n`);
   }
 }

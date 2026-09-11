@@ -2,13 +2,49 @@ import type { DatabaseConnection } from './database-url.js';
 
 import type { AuthTable, Column, TableCount } from './manifest.js';
 import { Client } from 'pg';
+import { databaseLabel } from './database-url.js';
 import { BackupError } from './errors.js';
+import { redact } from './redact.js';
 
 export interface Queryable {
   query: <T extends Record<string, unknown>>(sql: string) => Promise<{ rows: T[] }>;
 }
 
 const unsupportedTables = ['mfa_factors', 'sso_providers', 'saml_providers'] as const;
+
+/** Network failures that mean the host itself could not be reached. */
+const unreachableCodes = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+]);
+
+/**
+ * Explains a failed preflight connection without leaking the credentials.
+ *
+ * The label names the host, port, and database that were actually tried, which
+ * is usually the mistake, and the driver's own reason distinguishes a wrong
+ * password from a host that never answered.
+ */
+export function preflightFailureMessage(
+  connection: DatabaseConnection,
+  error: unknown,
+): string {
+  const reason = redact(
+    error instanceof Error && error.message ? error.message : 'no reason reported',
+  );
+  const { code } = error as { code?: unknown };
+  const supabaseDirect =
+    typeof code === 'string' &&
+    unreachableCodes.has(code) &&
+    /^db\.[a-z0-9]+\.supabase\.co$/u.test(connection.host);
+  const hint = supabaseDirect
+    ? " A direct db.<project-ref>.supabase.co connection resolves to IPv6 only unless the IPv4 add-on is enabled; use the Session Pooler host on port 5432 instead, whose user is 'postgres.<project-ref>'."
+    : '';
+  return `Database preflight connection to ${databaseLabel(connection)} failed: ${reason}.${hint}`;
+}
 
 /** Connects for read-only metadata checks; dump and restore still use libpq environment variables. */
 export async function connectForPreflight(
@@ -25,8 +61,8 @@ export async function connectForPreflight(
   try {
     await client.connect();
     return client;
-  } catch {
-    throw new BackupError('Database preflight connection failed.');
+  } catch (error: unknown) {
+    throw new BackupError(preflightFailureMessage(connection, error));
   }
 }
 
@@ -128,6 +164,18 @@ export async function getApplicationTables(
   return result.rows.map(
     ({ table_schema, table_name }) => `${table_schema}.${table_name}`,
   );
+}
+
+/** Reports which of the application schemas the target database already has. */
+export async function getExistingSchemas(
+  db: Queryable,
+  schemas: string[],
+): Promise<string[]> {
+  const values = schemas.map((schema) => `'${schema.replace(/'/gu, "''")}'`).join(', ');
+  const result = await db.query<{ schema_name: string }>(
+    `SELECT schema_name FROM information_schema.schemata WHERE schema_name IN (${values})`,
+  );
+  return result.rows.map(({ schema_name }) => schema_name);
 }
 
 /**

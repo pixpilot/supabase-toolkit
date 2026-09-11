@@ -9,12 +9,14 @@ import {
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
   ensureCountsMatch,
+  getExistingSchemas,
 } from './auth.js';
 import { loadRestoreConfig } from './config.js';
 import {
   databaseLabel,
   ensureDifferentDatabases,
   parseDatabaseUrl,
+  restoreTargetRef,
   toLibpqEnvironment,
 } from './database-url.js';
 import { BackupError } from './errors.js';
@@ -37,18 +39,25 @@ export interface RestoreOptions {
 }
 
 /**
- * Names the database every restoring `pg_restore` writes into.
+ * Selects one Auth table, the only way `pg_restore` accepts one.
  *
- * The rest of the connection arrives through the libpq environment, which keeps
- * the password out of the process arguments, but `--dbname` has no environment
- * equivalent: PostgreSQL 16 and later refuse to run without `-d` or `-f`, and
- * earlier versions would silently print SQL to stdout instead of restoring.
+ * `--table` takes a bare table name and ignores any schema in it, so
+ * `--table=auth.users` silently matches nothing and the run still succeeds
+ * having restored no rows. The schema has to travel in `--schema` instead.
+ *
+ * `--dbname` is equally unavoidable: the rest of the connection arrives through
+ * the libpq environment, which keeps the password out of the process arguments,
+ * but PostgreSQL 16 and later refuse to run without `-d` or `-f`, and earlier
+ * versions would print SQL to stdout instead of restoring.
  */
 export function authRestoreArguments(
   database: string,
   table: string,
   archive: string,
 ): string[] {
+  const [schema, name] = table.split('.');
+  if (!schema || !name || name.includes('.'))
+    throw new BackupError(`Auth table '${table}' must be schema-qualified.`);
   return [
     '--dbname',
     database,
@@ -56,9 +65,53 @@ export function authRestoreArguments(
     '--no-owner',
     '--no-privileges',
     '--exit-on-error',
-    `--table=${table}`,
+    `--schema=${schema}`,
+    `--table=${name}`,
     archive,
   ];
+}
+
+/** Matches one archive entry that creates a schema, in `pg_restore --list` output. */
+const schemaEntry = /^\s*\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+(\S+)\s/u;
+
+/**
+ * Removes the schema-creation entries for schemas the target already has.
+ *
+ * `pg_dump --schema=<name>` always writes a `CREATE SCHEMA` entry for the schema
+ * it was pointed at, and every database already owns `public`, so restoring the
+ * entry aborts the run. Dropping just that entry from the archive's table of
+ * contents leaves everything inside the schema untouched, and a schema the
+ * target does not have is still created.
+ */
+export function filterExistingSchemas(list: string, existing: readonly string[]): string {
+  if (!existing.length) return list;
+  const wanted = new Set(existing);
+  return list
+    .split('\n')
+    .filter((line) => {
+      const match = schemaEntry.exec(line);
+      return !match?.[1] || !wanted.has(match[1]);
+    })
+    .join('\n');
+}
+
+/**
+ * Writes a table of contents that skips creating schemas the target already has.
+ *
+ * Returns the list path when one is needed, and nothing when the archive can be
+ * restored whole, so the common case stays a plain `pg_restore`.
+ */
+async function appTableOfContents(
+  runner: ProgramRunner,
+  archive: string,
+  listPath: string,
+  existing: readonly string[],
+): Promise<string | undefined> {
+  const list = await runner.run('pg_restore', ['--list', archive]);
+  const filtered = filterExistingSchemas(list, existing);
+  if (filtered === list) return undefined;
+  await writePrivateFile(listPath, `${filtered}\n`);
+  return listPath;
 }
 
 /**
@@ -70,13 +123,18 @@ export function authRestoreArguments(
  * empty application schemas instead, which also means a restore never drops
  * anything.
  */
-export function appRestoreArguments(database: string, archive: string): string[] {
+export function appRestoreArguments(
+  database: string,
+  archive: string,
+  tocList?: string,
+): string[] {
   return [
     '--dbname',
     database,
     '--no-owner',
     '--no-privileges',
     '--exit-on-error',
+    ...(tocList ? ['--use-list', tocList] : []),
     archive,
   ];
 }
@@ -105,9 +163,9 @@ export async function restore(
     );
   if (options.apply) {
     if (!target) throw new BackupError('TARGET_DATABASE_URL is required with --apply.');
-    if (options.confirmTarget !== databaseLabel(target))
+    if (options.confirmTarget !== restoreTargetRef(target))
       throw new BackupError(
-        `Restore confirmation must exactly equal '${databaseLabel(target)}'.`,
+        `Restore confirmation must exactly equal '${restoreTargetRef(target)}'.`,
       );
   }
   return withTemporaryDirectory(async (directory) => {
@@ -160,7 +218,7 @@ export async function restore(
     }
     if (!target) {
       process.stdout.write(
-        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; Auth tables ${manifest.authTables.join(', ')}. Supply TARGET_DATABASE_URL to run compatibility preflight.\n`,
+        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; Auth tables ${manifest.authTables.join(', ')}. The archive is intact and decrypts. Pass --target-database-url to also check that a database can accept it.\n`,
       );
       return manifest;
     }
@@ -169,7 +227,7 @@ export async function restore(
       await ensureAuthCompatible(targetDb, manifest.authColumns);
       if (!options.apply) {
         process.stdout.write(
-          `Restore plan (no changes): target ${databaseLabel(target)}; Auth tables ${manifest.authTables.join(', ')} then application schemas ${manifest.appSchemas.join(', ')}. Applying requires those schemas and the target Auth tables to be empty.\n`,
+          `Restore plan (no changes): target ${databaseLabel(target)}; Auth tables ${manifest.authTables.join(', ')} then application schemas ${manifest.appSchemas.join(', ')}. The target accepts this backup; pass --apply to write it, which needs those schemas and the target Auth tables empty.\n`,
         );
         return manifest;
       }
@@ -182,10 +240,19 @@ export async function restore(
           authRestoreArguments(target.database, table, authDump),
           { env: pgEnv },
         );
-      await runner.run('pg_restore', appRestoreArguments(target.database, appDump), {
-        env: pgEnv,
-      });
+      /* Before the application data, whose foreign keys reference these rows. */
       await ensureCountsMatch(targetDb, manifest.authRowCounts);
+      const appList = await appTableOfContents(
+        runner,
+        appDump,
+        join(directory, 'app.list'),
+        await getExistingSchemas(targetDb, manifest.appSchemas),
+      );
+      await runner.run(
+        'pg_restore',
+        appRestoreArguments(target.database, appDump, appList),
+        { env: pgEnv },
+      );
       await ensureCountsMatch(targetDb, manifest.appTableCounts);
     } finally {
       await targetDb.end();

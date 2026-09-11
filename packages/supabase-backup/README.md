@@ -1,7 +1,9 @@
 # @pixpilot/supabase-backup
 
 Encrypted backups of application schemas plus `auth.users` and `auth.identities`.
-It is deliberately not full Supabase-project disaster recovery. Requires Node
+It is deliberately not full Supabase-project disaster recovery: read
+[what a restore does not carry](#what-a-restore-does-not-carry) before relying on
+it. Requires Node
 22+, `pg_dump`, `pg_restore`, and `age`; direct PostgreSQL or the Supabase
 Session Pooler on port 5432 is supported, while Transaction Pooler port 6543 is rejected.
 
@@ -125,7 +127,7 @@ npx @pixpilot/supabase-backup@latest restore \
   --r2-bucket … \
   --target-database-url 'postgresql://…' \
   --apply \
-  --confirm-target '<host>:5432/<database>'
+  --confirm-target '<recovery-project-ref>'
 ```
 
 Running `restore` with no flags walks you through the same steps, including a
@@ -139,6 +141,56 @@ schema first — `pg_restore --clean` cannot make room for you, because its
 `DROP … IF EXISTS` statements still fail when the table an object belongs to is
 missing. Verify user login and a representative application workflow manually
 afterward.
+
+## What a restore does not carry
+
+A backup holds the application schemas plus the rows of `auth.users` and
+`auth.identities`, and nothing else. Everything below survives only because you
+recreate it, so a recovery project is not usable until you have worked through
+this list. Plan the drill with that in mind, and keep the sources of these values
+somewhere the loss of the project cannot take with it.
+
+**Privileges and roles.** Both the dump and the restore run with
+`--no-privileges` and `--no-owner`, so no `GRANT`, `REVOKE`, or ownership is
+captured or applied, and roles such as `anon`, `authenticated`, `service_role`,
+and `supabase_auth_admin` belong to the project rather than the dump. Restored
+tables are therefore unreachable through PostgREST until their grants are back.
+Re-run the migrations that granted them, or apply the grants by hand:
+
+```sql
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+```
+
+Row-level security policies themselves are part of the dump and come back with
+their tables, so a table with RLS enabled stays closed until you grant it.
+
+**Auth configuration and the rest of Auth.** Providers and their secrets, SMTP,
+email templates, redirect URLs, rate limits, the JWT secret, and Auth Hooks are
+project settings held outside PostgreSQL. A hook, for example, has to be pointed
+at its function again under **Authentication → Hooks**, and the function needs
+its own grants:
+
+```sql
+grant usage on schema public to supabase_auth_admin;
+grant execute on function public.custom_access_token_hook(jsonb) to supabase_auth_admin;
+revoke execute on function public.custom_access_token_hook(jsonb) from authenticated, anon, public;
+grant all on table public.user_roles to supabase_auth_admin;
+```
+
+Only `auth.users` and `auth.identities` are backed up, so sessions and refresh
+tokens are gone and every user signs in again. MFA factors and SSO/SAML
+providers are refused at backup time rather than silently dropped.
+
+**Everything in other schemas.** Storage buckets and object metadata live in
+`storage` and the files themselves live in Supabase's object store; neither is
+included. The same applies to Realtime publications, `cron` jobs, queues, Vault
+secrets, extensions installed into `extensions`, and any schema you did not name
+in `--schemas`.
+
+**Everything outside the database.** Edge functions, their secrets, API keys,
+custom domains, network restrictions, and the project's own settings.
 
 ## Interactive prompts
 
@@ -162,15 +214,20 @@ npx @pixpilot/supabase-backup@latest restore \
 #   3) 2026-09-09 03:17 UTC  (2 days old)  20260909T031700Z
 #   4) Enter another manifest key
 # Select 1-4: 1
-# Apply this backup to the target database? It writes data. [y/N]: y
 # Target database URL to restore into:
-# Type 'db.example.test:5432/postgres' to confirm the restore target:
+# Restore target: aws-1-eu-west-1.pooler.supabase.com:5432/postgres
+#                 user postgres.abcdefghijklmnopqrst
+# Are you sure you want to restore into 'abcdefghijklmnopqrst'? Type YES to continue:
 ```
 
 Backups are listed newest first, ten at a time, from `--prefix`. Leave `--prefix`
 out as well and it is asked for, with `production/database` offered as the
-default. Answering `n` to the apply question keeps the run a dry run: it still
-downloads, verifies the checksums, decrypts, and inspects both archives.
+default.
+
+A terminal session restores: it asks for the target and makes you confirm it,
+rather than asking whether you meant to. To verify an archive without writing
+anything, run it unattended instead — without `--apply` it downloads, checks the
+checksums, decrypts, inspects both archives, and stops.
 
 - The prefix prompt offers `production/database` as its default and `--schemas`
   offers `public`, so pressing Enter accepts them. A default is only ever shown
@@ -181,8 +238,14 @@ downloads, verifies the checksums, decrypts, and inspects both archives.
   database URL flags on a shared or personal machine.
 - Every value is collected before the command starts, so a run never stops
   halfway to ask a question.
-- `--apply` still requires the typed target label, whether it comes from
-  `--confirm-target` or from the prompt.
+- A restore from a terminal always ends in a write, so `--apply` is implied
+  there; unattended, nothing is written without it.
+- The target is confirmed before anything is written. At the prompt the target is
+  printed and the question names it, and `YES` in capitals continues; nothing
+  else does. Unattended, `--confirm-target` carries that name instead: the
+  Supabase project reference, or `<host>:<port>/<database>` for a database that
+  has none. The address is never what you retype, because a pooler host is shared
+  by every project in its region and would confirm nothing.
 - Prompts are written to stderr, so `stdout` stays machine readable.
 
 Non-terminal sessions, including GitHub Actions, never prompt: a missing value
@@ -199,24 +262,24 @@ explicitly, which is what an unattended run needs. `--no-input` makes that
 explicit: it fails on a missing value instead of asking, so a script never
 blocks.
 
-| Option                         | Commands  | Purpose                                            |
-| ------------------------------ | --------- | -------------------------------------------------- |
-| `--r2-endpoint <url>`          | all       | `https://<account-id>.r2.cloudflarestorage.com`.   |
-| `--r2-bucket <name>`           | all       | Private bucket holding the backups.                |
-| `--r2-access-key-id <id>`      | all       | R2 access key ID.                                  |
-| `--r2-secret-access-key <key>` | all       | R2 secret access key.                              |
-| `--source-database-url <url>`  | `backup`  | Database to back up.                               |
-| `--age-recipient <age1…>`      | `backup`  | Public recipient used to encrypt.                  |
-| `--age-identity <AGE-SECRET…>` | `restore` | Private identity used to decrypt.                  |
-| `--target-database-url <url>`  | `restore` | Database to restore into, required by `--apply`.   |
-| `--prefix <prefix>`            | all       | Object-key prefix. Default: `production/database`. |
-| `--schemas <a,b>`              | `backup`  | Application schemas. Default: `public`.            |
-| `--max-age-hours <hours>`      | `status`  | Fail when the newest backup is older.              |
-| `--key <manifest-key>`         | `restore` | Manifest to restore, ending in `.json`.            |
-| `--apply`                      | `restore` | Write to the target database; omit for a dry run.  |
-| `--confirm-target <label>`     | `restore` | Typed confirmation, `<host>:<port>/<database>`.    |
-| `--no-input`                   | all       | Never ask; fail when a value is missing.           |
-| `-h`, `--help`                 | all       | Print the option list.                             |
+| Option                         | Commands  | Purpose                                                           |
+| ------------------------------ | --------- | ----------------------------------------------------------------- |
+| `--r2-endpoint <url>`          | all       | `https://<account-id>.r2.cloudflarestorage.com`.                  |
+| `--r2-bucket <name>`           | all       | Private bucket holding the backups.                               |
+| `--r2-access-key-id <id>`      | all       | R2 access key ID.                                                 |
+| `--r2-secret-access-key <key>` | all       | R2 secret access key.                                             |
+| `--source-database-url <url>`  | `backup`  | Database to back up.                                              |
+| `--age-recipient <age1…>`      | `backup`  | Public recipient used to encrypt.                                 |
+| `--age-identity <AGE-SECRET…>` | `restore` | Private identity used to decrypt.                                 |
+| `--target-database-url <url>`  | `restore` | Database to restore into, required by `--apply`.                  |
+| `--prefix <prefix>`            | all       | Object-key prefix. Default: `production/database`.                |
+| `--schemas <a,b>`              | `backup`  | Application schemas. Default: `public`.                           |
+| `--max-age-hours <hours>`      | `status`  | Fail when the newest backup is older.                             |
+| `--key <manifest-key>`         | `restore` | Manifest to restore, ending in `.json`.                           |
+| `--apply`                      | `restore` | Write to the target database; omit for a dry run.                 |
+| `--confirm-target <ref>`       | `restore` | Typed confirmation: project ref, else `<host>:<port>/<database>`. |
+| `--no-input`                   | all       | Never ask; fail when a value is missing.                          |
+| `-h`, `--help`                 | all       | Print the option list.                                            |
 
 A flag value is visible to other processes and is kept in shell history. On a
 personal or shared machine, leave `--r2-secret-access-key`, `--age-identity`,
@@ -279,12 +342,14 @@ npx @pixpilot/supabase-backup@latest restore \
   --source-database-url 'postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres' \
   --prefix production/database \
   --apply \
-  --confirm-target 'db.<recovery-ref>.supabase.co:5432/postgres' \
+  --confirm-target '<recovery-ref>' \
   --no-input
 ```
 
-`--confirm-target` must equal the `<host>:<port>/<database>` of
-`--target-database-url` exactly, or the restore stops before touching anything.
+`--confirm-target` must exactly equal the target's Supabase project reference —
+the `<ref>` in a `postgres.<ref>` pooler user or a `db.<ref>.supabase.co` host —
+or, for a database with no such reference, its `<host>:<port>/<database>`. It
+stops the restore before anything is touched.
 `--source-database-url` is optional here and only used to refuse a target that is
 the source. `--prefix` is unnecessary once `--key` is given, because the manifest
 carries the object keys of its own archives.

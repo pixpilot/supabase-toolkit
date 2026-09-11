@@ -74,7 +74,8 @@ Command options:
   --max-age-hours <hours>       Fail status when the newest backup is older.
   --key <manifest-key>          Manifest to restore.
   --apply                       Write to the target database.
-  --confirm-target <label>      Typed confirmation, '<host>:<port>/<database>'.
+  --confirm-target <ref>        Typed confirmation: the Supabase project ref,
+                                or '<host>:<port>/<database>' elsewhere.
   --no-input                    Never ask; fail when a value is missing.
   -h, --help                    Show this help.
 
@@ -144,21 +145,20 @@ async function planRestore(
   }
   ensureValidManifestKey(key);
   values = await fillMissingInput([ageIdentityField], values, prompter);
-  const apply =
-    parsed.switches.has('--apply') ||
-    (prompter
-      ? await prompter.confirm(
-          'Apply this backup to the target database? It writes data.',
-          false,
-        )
-      : false);
+  /*
+   * Someone sitting at the prompt came here to restore, so they are asked for a
+   * target and made to confirm it, rather than asked whether they meant it. An
+   * unattended run still writes nothing until --apply says so, which is how it
+   * verifies an archive without a database.
+   */
+  const apply = parsed.switches.has('--apply') || Boolean(prompter);
   let confirmTarget = parsed.values.get('--confirm-target');
   if (apply) {
     values = await fillMissingInput([targetDatabaseUrlField], values, prompter);
     if (confirmTarget === undefined) {
       if (!prompter)
         throw new BackupError(
-          "--apply requires --confirm-target '<host>:<port>/<database>'.",
+          '--apply requires --confirm-target, naming the target as the restore would ask for it: the Supabase project reference, or <host>:<port>/<database> for any other database.',
         );
       confirmTarget = await confirmRestoreTarget(
         values['TARGET_DATABASE_URL'] ?? '',

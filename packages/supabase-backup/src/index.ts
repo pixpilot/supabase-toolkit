@@ -1,4 +1,8 @@
-export { ensureApplicationSchemasEmpty } from './auth.js';
+export {
+  ensureApplicationSchemasEmpty,
+  getExistingSchemas,
+  preflightFailureMessage,
+} from './auth.js';
 export { backup, backupWithConfig } from './backup.js';
 export {
   type CliArguments,
@@ -13,6 +17,7 @@ export {
   databaseLabel,
   ensureDifferentDatabases,
   parseDatabaseUrl,
+  restoreTargetRef,
   toLibpqEnvironment,
 } from './database-url.js';
 export { BackupError } from './errors.js';

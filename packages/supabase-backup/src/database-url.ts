@@ -64,6 +64,34 @@ export function databaseLabel(connection: DatabaseConnection): string {
   return `${connection.host}:${connection.port}/${connection.database}`;
 }
 
+/** Supabase pooler hosts are shared, so the project lives in the user name. */
+const poolerHost = /\.pooler\.supabase\.(?:com|co)$/u;
+
+/** A direct Supabase host carries the project reference itself. */
+const directHost = /^db\.([a-z0-9]{16,})\.supabase\.(?:com|co)$/u;
+
+/** Pooler users are '<role>.<project-ref>'. */
+const poolerUser = /^[A-Za-z_][\w$]*\.([a-z0-9]{16,})$/u;
+
+/**
+ * Names the shortest value that still identifies the database being written to.
+ *
+ * A typed confirmation is only worth typing when getting it wrong means you were
+ * about to overwrite the wrong database. `databaseLabel` cannot do that for a
+ * Supabase pooler target: every project in a region shares the host, port, and
+ * database name, and only the user names the project. The project reference is
+ * used where one exists, and the full label everywhere else.
+ */
+export function restoreTargetRef(connection: DatabaseConnection): string {
+  const direct = directHost.exec(connection.host);
+  if (direct?.[1]) return direct[1];
+  if (poolerHost.test(connection.host)) {
+    const pooled = poolerUser.exec(connection.user);
+    if (pooled?.[1]) return pooled[1];
+  }
+  return databaseLabel(connection);
+}
+
 /** Prevents a configured source database from also being used as a restore target. */
 export function ensureDifferentDatabases(
   source: DatabaseConnection | undefined,
