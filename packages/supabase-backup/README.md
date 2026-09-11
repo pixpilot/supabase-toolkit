@@ -24,6 +24,26 @@ next to API Tokens.
 4. Select **Create API Token**.
 5. Copy the Access Key ID, Secret Access Key, and S3 endpoint. The secret is shown once.
 
+## Generate an age encryption key
+
+Location: a secure terminal on the machine where you will store the restore key.
+
+1. Generate a key pair:
+
+   ```bash
+   age-keygen -o age-identity.txt
+   ```
+
+2. Copy the public recipient value for `BACKUP_AGE_RECIPIENT`:
+
+   ```bash
+   age-keygen -y age-identity.txt
+   ```
+
+3. Store the `AGE-SECRET-KEY-…` line from `age-identity.txt` as the `AGE_IDENTITY`
+   secret for restore drills. Add `age-identity.txt` to `.gitignore` and store a
+   second copy in your approved secret manager.
+
 ## Configure and run a backup
 
 Location: your terminal or the repository that calls this reusable workflow.
