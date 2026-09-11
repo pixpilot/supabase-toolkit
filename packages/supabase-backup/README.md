@@ -323,9 +323,9 @@ jobs:
 
 `postgres-client-version` and `package-version` are optional. `package-version` is
 the npm range the job runs (`npx @pixpilot/supabase-backup@<range>`) and defaults to
-`latest`, so the job follows every release, including a breaking major. Pin a major
-such as `2`, or an exact version, if you want releases to reach this job only when
-you bump it.
+the major the workflow is written against, so a breaking release cannot reach a
+scheduled backup on its own. Pass `latest` if you would rather follow every
+release, and expect to update the workflow when a major lands.
 
 `postgres-client-version` selects the `postgresql-client-<major>` package installed
 from the PostgreSQL APT repository; it defaults to `17`. It must be greater than or
