@@ -59,6 +59,8 @@ try {
     process.stdout.write('HeadObject: OK (expected 404 for a new key)\n');
   }
 } catch (error) {
-  process.stderr.write(`${JSON.stringify(errorDetails(error), null, JSON_INDENTATION)}\n`);
+  process.stderr.write(
+    `${JSON.stringify(errorDetails(error), null, JSON_INDENTATION)}\n`,
+  );
   process.exitCode = 1;
 }
