@@ -219,6 +219,21 @@ describe('backup records', () => {
     ).rejects.toThrow('unavailable');
   });
 
+  it('reports subprocess stderr on failure while redacting credentials', async () => {
+    await expect(
+      systemRunner.run(process.execPath, [
+        '-e',
+        "process.stderr.write('pg_dump: error: connection to postgresql://u:p@h/db failed'); process.exit(3);",
+      ]),
+    ).rejects.toThrow(
+      /exited with code 3: pg_dump: error: connection to \[redacted database URL\] failed/u,
+    );
+
+    await expect(
+      systemRunner.run(process.execPath, ['-e', 'process.exit(2);']),
+    ).rejects.toThrow('without writing any diagnostics');
+  });
+
   it('requires an exact target confirmation before restore can change a database', async () => {
     const store = new MemoryStore();
     store.values.set('manifest.json', Buffer.from(JSON.stringify(manifest())));

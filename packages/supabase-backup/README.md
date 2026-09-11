@@ -123,12 +123,18 @@ jobs:
       r2-endpoint: ${{ vars.R2_ENDPOINT }}
       r2-bucket: ${{ vars.R2_BUCKET }}
       max-age-hours: 36
+      postgres-client-version: '17'
       package-version: '1'
     secrets:
       database-url: ${{ secrets.SOURCE_DATABASE_URL }}
       r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
       r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
+
+`postgres-client-version` selects the `postgresql-client-<major>` package installed
+from the PostgreSQL APT repository; it defaults to `17`. It must be greater than or
+equal to your Supabase server's major version, otherwise `pg_dump` aborts with a
+server version mismatch. Check yours with `select version()` in the SQL editor.
 
 Publish matching npm and `v1` workflow releases; run a recovery drill immediately,
 quarterly, and after material Auth changes.
