@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 3.1.0
+
+### Minor Changes
+
+- update package-version to major range for safer backups
+
 ## 3.0.0
 
 ### Major Changes
