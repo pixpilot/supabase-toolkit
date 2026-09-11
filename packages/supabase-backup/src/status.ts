@@ -2,7 +2,7 @@ import type { BackupManifest } from './manifest.js';
 import type { ObjectStore } from './r2.js';
 import { loadStatusConfig } from './config.js';
 import { BackupError } from './errors.js';
-import { parseManifest } from './manifest.js';
+import { backupKeyLayoutVersion, manifestObjectName, parseManifest } from './manifest.js';
 import { R2Store } from './r2.js';
 
 export interface BackupStatus {
@@ -11,16 +11,24 @@ export interface BackupStatus {
   manifestKey: string;
 }
 
+/** Lists every manifest key for the current key layout, newest first. */
+export async function listManifestKeys(
+  prefix: string,
+  store: ObjectStore,
+): Promise<string[]> {
+  return (await store.list(`${prefix}/${backupKeyLayoutVersion}/`))
+    .filter((key) => key.endsWith(`/${manifestObjectName}`))
+    .sort()
+    .reverse();
+}
+
 /** Finds the latest complete manifest and checks its referenced archives remain available. */
 export async function getBackupStatus(
   prefix: string,
   store: ObjectStore,
   now = new Date(),
 ): Promise<BackupStatus> {
-  const keys = (await store.list(`${prefix}/`))
-    .filter((key) => key.endsWith('.json'))
-    .sort()
-    .reverse();
+  const keys = await listManifestKeys(prefix, store);
   for (const manifestKey of keys) {
     let manifest: BackupManifest;
     try {

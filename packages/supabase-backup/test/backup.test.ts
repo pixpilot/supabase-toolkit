@@ -157,9 +157,8 @@ describe('backup records', () => {
       'production/database',
       new Date('2026-09-10T03:00:00Z'),
     );
-    expect(keys.app).toBe(
-      'production/database/2026/09/10/2026-09-10T03-00-00Z.app.dump.age',
-    );
+    expect(keys.app).toBe('production/database/v1/20260910T030000Z/app.dump.age');
+    expect(keys.manifest).toBe('production/database/v1/20260910T030000Z/manifest.json');
     expect(() => parseManifest('{}')).toThrow('incomplete');
   });
 
@@ -187,13 +186,13 @@ describe('backup records', () => {
 
   it('detects stale or incomplete manifests', async () => {
     const store = new MemoryStore();
-    store.values.set('production/database/invalid.json', Buffer.from('{}'));
+    store.values.set('production/database/v1/invalid/manifest.json', Buffer.from('{}'));
     await expect(
       getBackupStatus('production/database', store, new Date('2026-01-03T00:00:00Z')),
     ).rejects.toThrow('No valid');
     const complete = manifest();
     store.values.set(
-      'production/database/2026/01/01/backup.json',
+      'production/database/v1/20260101T000000Z/manifest.json',
       Buffer.from(JSON.stringify(complete)),
     );
     for (const key of [
@@ -215,7 +214,7 @@ describe('backup records', () => {
       'overwrite',
     );
     store.values.set(
-      'production/database/backup.json',
+      'production/database/v1/20260101T000000Z/manifest.json',
       Buffer.from(JSON.stringify(manifest())),
     );
     await expect(getBackupStatus('production/database', store)).rejects.toThrow(

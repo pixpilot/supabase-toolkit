@@ -27,6 +27,7 @@ import { parseManifest } from './manifest.js';
 import { ensureRestoreToolSupportsArchive } from './postgres-tools.js';
 import { systemRunner } from './process.js';
 import { R2Store } from './r2.js';
+import { ensureValidManifestKey } from './validation.js';
 
 export interface RestoreOptions {
   apply: boolean;
@@ -40,10 +41,7 @@ export async function restore(
   env = process.env,
   dependencies: { runner?: ProgramRunner; store?: ObjectStore } = {},
 ): Promise<BackupManifest> {
-  if (!options.key.endsWith('.json') || options.key.includes('..'))
-    throw new BackupError(
-      '--key must be an immutable backup manifest key ending in .json.',
-    );
+  ensureValidManifestKey(options.key);
   const config = loadRestoreConfig(env, options.apply);
   const store = dependencies.store || new R2Store(config);
   const runner = dependencies.runner || systemRunner;

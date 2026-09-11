@@ -32,23 +32,28 @@ export interface BackupManifest {
   postgresServerVersion: string;
 }
 
+/** Key-layout generation; bump only when the object-key structure changes. */
+export const backupKeyLayoutVersion = 'v1';
+
+/** Names the manifest inside every backup folder. */
+export const manifestObjectName = 'manifest.json';
+
 /** Generates immutable object names for one UTC backup timestamp. */
 export function backupObjectKeys(
   prefix: string,
   createdAt: Date,
 ): Record<'app' | 'auth' | 'appChecksum' | 'authChecksum' | 'manifest', string> {
-  const iso = createdAt
+  const stamp = createdAt
     .toISOString()
-    .replace(/\.\d{3}Z$/u, 'Z')
-    .replace(/:/gu, '-');
-  const day = createdAt.toISOString().slice(0, 10).replace(/-/gu, '/');
-  const base = `${prefix}/${day}/${iso}`;
+    .replace(/[-:]/gu, '')
+    .replace(/\.\d{3}Z$/u, 'Z');
+  const base = `${prefix}/${backupKeyLayoutVersion}/${stamp}`;
   return {
-    app: `${base}.app.dump.age`,
-    auth: `${base}.auth.dump.age`,
-    appChecksum: `${base}.app.sha256`,
-    authChecksum: `${base}.auth.sha256`,
-    manifest: `${base}.json`,
+    app: `${base}/app.dump.age`,
+    auth: `${base}/auth.dump.age`,
+    appChecksum: `${base}/app.sha256`,
+    authChecksum: `${base}/auth.sha256`,
+    manifest: `${base}/${manifestObjectName}`,
   };
 }
 

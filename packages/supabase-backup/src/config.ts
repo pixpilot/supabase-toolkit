@@ -6,6 +6,7 @@ import {
   ensureValidBackupPrefix,
   ensureValidR2Bucket,
   ensureValidR2Endpoint,
+  parseAppSchemas,
 } from './validation.js';
 
 export interface R2Config {
@@ -61,19 +62,7 @@ function backupPrefix(env: NodeJS.ProcessEnv): string {
 
 /** Loads and validates backup-only environment configuration. */
 export function loadBackupConfig(env = process.env): BackupConfig {
-  const appSchemas = (env['APP_SCHEMAS'] || 'public')
-    .split(',')
-    .map((schema) => schema.trim())
-    .filter(Boolean);
-  if (
-    !appSchemas.length ||
-    appSchemas.includes('auth') ||
-    appSchemas.some((schema) => !/^[A-Za-z_][\w$]*$/u.test(schema))
-  ) {
-    throw new BackupError(
-      'APP_SCHEMAS must contain valid application schemas and must not include auth.',
-    );
-  }
+  const appSchemas = parseAppSchemas(env['APP_SCHEMAS'] || 'public');
   const ageRecipient = required(env, 'BACKUP_AGE_RECIPIENT');
   ensureValidAgeRecipient(ageRecipient);
   return {

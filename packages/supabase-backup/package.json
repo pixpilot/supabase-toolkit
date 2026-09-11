@@ -50,6 +50,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "probe:r2": "node scripts/probe-r2.mjs",
+    "cli:run": "pnpm build && node ./dist/cli.js",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
   "dependencies": {

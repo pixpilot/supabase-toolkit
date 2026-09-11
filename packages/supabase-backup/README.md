@@ -59,6 +59,27 @@ R2_BUCKET='myapp-production-backups' BACKUP_PREFIX='production/database' \
 npx @pixpilot/supabase-backup@1 backup
 ```
 
+Each run writes one immutable folder under `BACKUP_PREFIX/v1/<UTC timestamp>/`:
+
+```text
+myapp-production-backups
+└── production/
+    └── database/
+        └── v1/
+            ├── 20260910T031700Z/
+            │   ├── app.dump.age
+            │   ├── app.sha256
+            │   ├── auth.dump.age
+            │   ├── auth.sha256
+            │   └── manifest.json
+            └── 20260911T031700Z/
+                └── …
+```
+
+`v1` is the key-layout generation and only changes if the structure does. Folder
+names sort chronologically, so `status` finds the newest backup by listing
+`BACKUP_PREFIX/v1/`.
+
 `APP_SCHEMAS` is comma-separated and defaults to `public`; `auth` is never an
 application schema. Backups fail if non-empty `auth.mfa_factors`,
 `auth.sso_providers`, or `auth.saml_providers` would be omitted. R2 must be a
@@ -71,7 +92,7 @@ your bucket → Settings → Object Lifecycle Rules.
 
 1. Select **Add rule**.
 2. Name the rule, such as `production-backups-30-days`.
-3. Set the prefix to `production/database/` — your `BACKUP_PREFIX` plus `/`.
+3. Set the prefix to `production/database/v1/` — your `BACKUP_PREFIX` plus `/v1/`.
 4. Set **Delete objects** to `30` days.
 5. Save the rule.
 
@@ -96,6 +117,44 @@ npx @pixpilot/supabase-backup@1 restore --key <manifest-key> --apply \
 Apply restores Auth data before application data, never cleans `auth`, requires
 empty target Auth tables, and rejects a target matching `SOURCE_DATABASE_URL`.
 Verify user login and a representative application workflow manually afterward.
+
+## Interactive prompts
+
+Location: your terminal.
+
+Any value a command needs and was not given is asked for when both stdin and
+stderr are a terminal. A flag always wins, the environment comes next, and only
+what is still missing is asked, so `restore --key <manifest-key>` never asks
+about the key again:
+
+```bash
+npx @pixpilot/supabase-backup@1 restore
+# Select a backup to restore (newest first):
+#   1) production/database/v1/20260911T031700Z
+#   2) production/database/v1/20260910T031700Z
+#   3) Enter another manifest key
+# Select 1-3: 1
+# age identity used to decrypt (AGE-SECRET-KEY-1…):
+# Apply this backup to the target database? It writes data. [y/N]: y
+# Target database URL to restore into:
+# Type 'db.example.test:5432/postgres' to confirm the restore target:
+```
+
+- Secrets are read only from the environment or a hidden prompt, never from a
+  flag, because command-line arguments are visible to other processes and are
+  kept in shell history. Typed secrets are not echoed.
+- Every value is collected before the command starts, so a run never stops
+  halfway to ask a question.
+- `--apply` still requires the typed target label, whether it comes from
+  `--confirm-target` or from the prompt.
+- Prompts are written to stderr, so `stdout` stays machine readable.
+
+Non-terminal sessions, including GitHub Actions, never prompt: a missing value
+fails immediately with the name of the variable to set. Add `--no-input` to get
+that behaviour in a terminal, for example inside a wrapper script.
+
+`--prefix` overrides `BACKUP_PREFIX` and `--schemas` overrides `APP_SCHEMAS`;
+`--help` lists every option.
 
 ## Reusable workflow
 
@@ -154,12 +213,16 @@ bucket**.
    ```
 
 2. Confirm it prints a completed manifest key.
-3. Open the R2 bucket and confirm the manifest plus encrypted app and Auth archives
-   appear under your `BACKUP_PREFIX`.
+3. Open the R2 bucket and confirm one `BACKUP_PREFIX/v1/<timestamp>/` folder holds
+   `manifest.json` plus the encrypted app and Auth archives and their checksums.
 4. Open **Settings → Object Lifecycle Rules** and confirm the enabled rule matches
-   `BACKUP_PREFIX/` and its retention period.
+   `BACKUP_PREFIX/v1/` and its retention period.
 
 ## Gotchas
 
 - Do not use `secrets: inherit`; pass only the three required secrets explicitly.
 - Lifecycle deletion is asynchronous and typically occurs within 24 hours after expiry.
+- Backups written before `v1` used a `BACKUP_PREFIX/YYYY/MM/DD/<timestamp>.*` layout.
+  `status` no longer sees them; `restore --key` still reads them, because a manifest
+  carries the full object keys of its own archives. Keep the old lifecycle rule until
+  those objects expire.

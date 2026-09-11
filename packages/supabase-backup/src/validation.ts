@@ -133,3 +133,29 @@ export function ensureNoTemplatePlaceholder(value: string): void {
     );
   }
 }
+
+/** Requires an immutable manifest key that cannot escape the backup namespace. */
+export function ensureValidManifestKey(value: string): void {
+  if (!value.endsWith('.json') || value.includes('..'))
+    throw new BackupError(
+      '--key must be an immutable backup manifest key ending in .json.',
+    );
+}
+
+/** Splits and validates the comma-separated application schema list. */
+export function parseAppSchemas(value: string): string[] {
+  const schemas = value
+    .split(',')
+    .map((schema) => schema.trim())
+    .filter(Boolean);
+  if (
+    !schemas.length ||
+    schemas.includes('auth') ||
+    schemas.some((schema) => !/^[A-Za-z_][\w$]*$/u.test(schema))
+  ) {
+    throw new BackupError(
+      'APP_SCHEMAS must contain valid application schemas and must not include auth.',
+    );
+  }
+  return schemas;
+}
