@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 2.1.1
+
+### Patch Changes
+
+- pin package version to prevent breaking changes
+
 ## 2.1.0
 
 ### Minor Changes
