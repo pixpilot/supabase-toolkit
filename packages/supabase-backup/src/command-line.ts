@@ -1,3 +1,4 @@
+import type { InputValues } from './interactive.js';
 import type { Prompter, PromptStreams } from './prompt.js';
 import type { ObjectStore } from './r2.js';
 import { backup } from './backup.js';
@@ -5,11 +6,12 @@ import { loadStatusConfig } from './config.js';
 import { BackupError } from './errors.js';
 import {
   ageIdentityField,
+  allFields,
   backupFields,
   backupPrefixField,
   chooseManifestKey,
   confirmRestoreTarget,
-  fillMissingEnvironment,
+  fillMissingInput,
   r2Fields,
   statusFields,
   targetDatabaseUrlField,
@@ -23,18 +25,21 @@ import { ensureValidManifestKey } from './validation.js';
 /**
  * Command-line parsing and input resolution.
  *
+ * Configuration comes from flags only; the process environment is never read.
  * Every value a command needs is resolved before the command starts, so a long
  * run never stops halfway to ask a question, and the prompt is closed before any
  * dump, upload, or restore begins.
  */
 
+/** Configuration flags, mapped to the value each one fills. */
+const configurationFlags = new Map(allFields.map((field) => [field.flag, field.name]));
+
 /** Options that take the next argument, or an inline `--option=value`. */
 const valueOptions = new Set([
+  ...configurationFlags.keys(),
   '--confirm-target',
   '--key',
   '--max-age-hours',
-  '--prefix',
-  '--schemas',
 ]);
 
 /** Options that are present or absent and never carry a value. */
@@ -53,21 +58,30 @@ Commands:
   status     Verify the newest backup exists and is recent enough.
   restore    Verify a backup, and write to a database only when asked.
 
-Options:
-  --prefix <prefix>         Object-key prefix; overrides BACKUP_PREFIX.
-  --schemas <a,b>           Application schemas; overrides APP_SCHEMAS.
-  --max-age-hours <hours>   Fail status when the newest backup is older.
-  --key <manifest-key>      Manifest to restore.
-  --apply                   Write to TARGET_DATABASE_URL.
-  --confirm-target <label>  Typed confirmation, '<host>:<port>/<database>'.
-  --no-input                Never ask; fail when a value is missing.
-  -h, --help                Show this help.
+Connection options:
+  --r2-endpoint <url>           https://<account-id>.r2.cloudflarestorage.com
+  --r2-bucket <name>            Private bucket holding the backups.
+  --r2-access-key-id <id>       R2 access key ID.
+  --r2-secret-access-key <key>  R2 secret access key.
+  --source-database-url <url>   Database to back up.
+  --target-database-url <url>   Database to restore into.
+  --age-recipient <age1…>       Public recipient used to encrypt a backup.
+  --age-identity <AGE-SECRET…>  Private identity used to decrypt a backup.
 
-Anything not supplied is asked for when the session is a terminal, so a missing
---key offers the newest backups to choose from, and the prefix is asked with the
-default 'production/database'. Secrets such as database URLs, R2 credentials,
-and the age identity are read only from the environment or a hidden prompt,
-never from a flag.`;
+Command options:
+  --prefix <prefix>             Object-key prefix. Default: production/database.
+  --schemas <a,b>               Application schemas. Default: public.
+  --max-age-hours <hours>       Fail status when the newest backup is older.
+  --key <manifest-key>          Manifest to restore.
+  --apply                       Write to the target database.
+  --confirm-target <label>      Typed confirmation, '<host>:<port>/<database>'.
+  --no-input                    Never ask; fail when a value is missing.
+  -h, --help                    Show this help.
+
+The environment is never read. Anything not passed is asked for when the session
+is a terminal, so a missing --key offers the newest backups to choose from. A
+secret given as a flag is visible to other processes and is kept in shell
+history; answering the prompt instead keeps it out of both.`;
 
 /** Parses argv strictly, so a typo fails instead of silently changing a run. */
 export function parseArguments(args: readonly string[]): CliArguments {
@@ -99,27 +113,37 @@ export function parseArguments(args: readonly string[]): CliArguments {
   return { command, values, switches };
 }
 
+/** Collects the configuration flags that were actually passed. */
+export function inputFromArguments(parsed: CliArguments): InputValues {
+  const values: InputValues = {};
+  for (const [flag, name] of configurationFlags) {
+    const value = parsed.values.get(flag);
+    if (value !== undefined) values[name] = value;
+  }
+  return values;
+}
+
 /** Resolves restore input, then returns the call that performs the restore. */
 async function planRestore(
   parsed: CliArguments,
-  base: NodeJS.ProcessEnv,
+  given: InputValues,
   prompter: Prompter | undefined,
   dependencies: { store?: ObjectStore },
 ): Promise<() => Promise<unknown>> {
-  let env = await fillMissingEnvironment(r2Fields, base, prompter);
+  let values = await fillMissingInput(r2Fields, given, prompter);
   let key = parsed.values.get('--key');
   if (key === undefined) {
     if (!prompter)
       throw new BackupError(
         'restore requires --key <manifest-key> when the session is not a terminal.',
       );
-    env = await fillMissingEnvironment([backupPrefixField], env, prompter);
-    const config = loadStatusConfig(env);
+    values = await fillMissingInput([backupPrefixField], values, prompter);
+    const config = loadStatusConfig(values);
     const store = dependencies.store || new R2Store(config);
     key = await chooseManifestKey(config.prefix, store, prompter);
   }
   ensureValidManifestKey(key);
-  env = await fillMissingEnvironment([ageIdentityField], env, prompter);
+  values = await fillMissingInput([ageIdentityField], values, prompter);
   const apply =
     parsed.switches.has('--apply') ||
     (prompter
@@ -129,42 +153,42 @@ async function planRestore(
         )
       : false);
   let confirmTarget = parsed.values.get('--confirm-target');
-  if (apply && prompter) {
-    env = await fillMissingEnvironment([targetDatabaseUrlField], env, prompter);
-    if (confirmTarget === undefined)
+  if (apply) {
+    values = await fillMissingInput([targetDatabaseUrlField], values, prompter);
+    if (confirmTarget === undefined) {
+      if (!prompter)
+        throw new BackupError(
+          "--apply requires --confirm-target '<host>:<port>/<database>'.",
+        );
       confirmTarget = await confirmRestoreTarget(
-        env['TARGET_DATABASE_URL'] ?? '',
+        values['TARGET_DATABASE_URL'] ?? '',
         prompter,
       );
+    }
   }
   const options = { key, apply, ...(confirmTarget ? { confirmTarget } : {}) };
-  const resolved = env;
+  const resolved = values;
   return async () => restore(options, resolved);
 }
 
 /** Collects every missing value first, so nothing is asked mid-run. */
 export async function planCommand(
   parsed: CliArguments,
-  base: NodeJS.ProcessEnv,
   prompter: Prompter | undefined,
   dependencies: { store?: ObjectStore } = {},
 ): Promise<() => Promise<unknown>> {
-  const overrides: NodeJS.ProcessEnv = { ...base };
-  const prefix = parsed.values.get('--prefix');
-  if (prefix !== undefined) overrides['BACKUP_PREFIX'] = prefix;
-  const schemas = parsed.values.get('--schemas');
-  if (schemas !== undefined) overrides['APP_SCHEMAS'] = schemas;
+  const given = inputFromArguments(parsed);
   if (parsed.command === 'backup') {
-    const env = await fillMissingEnvironment(backupFields, overrides, prompter);
-    return async () => backup(env);
+    const values = await fillMissingInput(backupFields, given, prompter);
+    return async () => backup(values);
   }
   if (parsed.command === 'status') {
-    const env = await fillMissingEnvironment(statusFields, overrides, prompter);
+    const values = await fillMissingInput(statusFields, given, prompter);
     const raw = parsed.values.get('--max-age-hours');
-    return async () => status(raw === undefined ? undefined : Number(raw), env);
+    return async () => status(raw === undefined ? undefined : Number(raw), values);
   }
   if (parsed.command === 'restore')
-    return planRestore(parsed, overrides, prompter, dependencies);
+    return planRestore(parsed, given, prompter, dependencies);
   throw new BackupError(usage);
 }
 
@@ -172,7 +196,6 @@ export async function planCommand(
 export async function runCli(
   args = process.argv.slice(2),
   streams: PromptStreams = { input: process.stdin, output: process.stderr },
-  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const parsed = parseArguments(args);
   if (parsed.switches.has('--help') || parsed.switches.has('-h')) {
@@ -185,7 +208,7 @@ export async function runCli(
       : createPrompter(streams);
   let run: () => Promise<unknown>;
   try {
-    run = await planCommand(parsed, env, prompter);
+    run = await planCommand(parsed, prompter);
   } finally {
     prompter?.close();
   }

@@ -1,23 +1,26 @@
 ---
-'@pixpilot/supabase-backup': minor
+'@pixpilot/supabase-backup': major
 ---
 
-Ask for missing CLI input instead of failing. `backup`, `status`, and `restore`
-now prompt for any value that was not supplied by a flag or the environment when
-the session is a terminal, so `restore` with no `--key` lists the newest backups
-to pick from, and `--apply` asks for the target database URL and the typed target
-confirmation. A value that is already present is never asked about again.
+Take every value as a flag and ask for what is missing. The CLI no longer reads
+the environment: `--source-database-url`, `--target-database-url`,
+`--age-recipient`, `--age-identity`, `--r2-endpoint`, `--r2-bucket`,
+`--r2-access-key-id`, `--r2-secret-access-key`, `--prefix`, and `--schemas`
+replace `SOURCE_DATABASE_URL`, `TARGET_DATABASE_URL`, `BACKUP_AGE_RECIPIENT`,
+`AGE_IDENTITY`, `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `BACKUP_PREFIX`, and `APP_SCHEMAS`. The library entry
+points still take the same configuration object, so only the CLI changes.
 
-Secrets are accepted only from the environment or a hidden prompt, never from a
-flag, and typed secrets are not echoed. Prompts go to stderr, every value is
-resolved before the command starts, and non-terminal sessions such as CI never
-prompt: they fail immediately naming the missing variable, which `--no-input`
-also forces in a terminal.
+Anything a flag did not supply is asked for when the session is a terminal, so
+`restore` with no `--key` lists the newest backups to pick from, and `--apply`
+asks for the target database URL and the typed target confirmation. A value that
+was passed is never asked about again, a secret typed at the prompt is not echoed
+and never reaches the process arguments, prompts go to stderr, and every value is
+resolved before the command starts.
 
-The prefix prompt offers `production/database` as its default and `APP_SCHEMAS`
-offers `public`, both accepted by pressing Enter. Defaults apply only at the
-prompt: a non-terminal session still fails when `BACKUP_PREFIX` is unset, so a
-misconfigured job cannot fall back to the production prefix silently.
+`--prefix` defaults to `production/database` and `--schemas` to `public`. A
+non-terminal session, such as CI, never prompts: it fails naming the flag to
+pass, which `--no-input` also forces in a terminal.
 
-Adds `--prefix`, `--schemas`, `--no-input`, and `--help`, and unknown options now
-fail instead of being ignored.
+Adds `--no-input` and `--help`, and unknown options now fail instead of being
+ignored. The reusable workflow passes the new flags.

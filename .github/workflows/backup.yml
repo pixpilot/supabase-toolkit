@@ -9,7 +9,7 @@ on:
       r2-bucket: {required: true, type: string}
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
-      package-version: {required: false, default: '1', type: string}
+      package-version: {required: false, default: '2', type: string}
     secrets:
       database-url: {required: true}
       r2-access-key-id: {required: true}
@@ -44,21 +44,45 @@ jobs:
           command -v pg_dump pg_restore
           pg_dump --version
           pg_restore --version
+      # The CLI reads no environment configuration; every value is a flag. The
+      # step environment only carries the values into the command, because
+      # interpolating a secret straight into the shell would break on a quote or
+      # a backtick, and "$VAR" cannot.
       - name: Create encrypted backup
         env:
-          SOURCE_DATABASE_URL: ${{ secrets.database-url }}
-          BACKUP_AGE_RECIPIENT: ${{ inputs.age-recipient }}
-          R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
-          R2_ENDPOINT: ${{ inputs.r2-endpoint }}
-          R2_BUCKET: ${{ inputs.r2-bucket }}
-          BACKUP_PREFIX: ${{ inputs.backup-prefix }}
-        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} backup
+          SB_DATABASE_URL: ${{ secrets.database-url }}
+          SB_AGE_RECIPIENT: ${{ inputs.age-recipient }}
+          SB_R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
+          SB_R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
+          SB_R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+          SB_R2_BUCKET: ${{ inputs.r2-bucket }}
+          SB_BACKUP_PREFIX: ${{ inputs.backup-prefix }}
+        run: |
+          set -euo pipefail
+          npx @pixpilot/supabase-backup@${{ inputs.package-version }} backup \
+            --source-database-url "$SB_DATABASE_URL" \
+            --age-recipient "$SB_AGE_RECIPIENT" \
+            --r2-access-key-id "$SB_R2_ACCESS_KEY_ID" \
+            --r2-secret-access-key "$SB_R2_SECRET_ACCESS_KEY" \
+            --r2-endpoint "$SB_R2_ENDPOINT" \
+            --r2-bucket "$SB_R2_BUCKET" \
+            --prefix "$SB_BACKUP_PREFIX" \
+            --no-input
       - name: Verify backup health
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
-          R2_ENDPOINT: ${{ inputs.r2-endpoint }}
-          R2_BUCKET: ${{ inputs.r2-bucket }}
-          BACKUP_PREFIX: ${{ inputs.backup-prefix }}
-        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} status --max-age-hours ${{ inputs.max-age-hours }}
+          SB_R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
+          SB_R2_SECRET_ACCESS_KEY: ${{ secrets.r2-secret-access-key }}
+          SB_R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+          SB_R2_BUCKET: ${{ inputs.r2-bucket }}
+          SB_BACKUP_PREFIX: ${{ inputs.backup-prefix }}
+          SB_MAX_AGE_HOURS: ${{ inputs.max-age-hours }}
+        run: |
+          set -euo pipefail
+          npx @pixpilot/supabase-backup@${{ inputs.package-version }} status \
+            --r2-access-key-id "$SB_R2_ACCESS_KEY_ID" \
+            --r2-secret-access-key "$SB_R2_SECRET_ACCESS_KEY" \
+            --r2-endpoint "$SB_R2_ENDPOINT" \
+            --r2-bucket "$SB_R2_BUCKET" \
+            --prefix "$SB_BACKUP_PREFIX" \
+            --max-age-hours "$SB_MAX_AGE_HOURS" \
+            --no-input

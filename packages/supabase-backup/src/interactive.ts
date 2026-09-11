@@ -18,23 +18,32 @@ import {
 /**
  * Resolves the values a command needs but was not given.
  *
- * A flag always wins, the environment comes next, and only a terminal session is
- * asked. Secrets are never accepted as flags, because command-line arguments are
- * visible to other processes on the machine and are kept in shell history.
+ * Every value is a flag, and the process environment is never read. What a flag
+ * did not supply is asked for when the session is a terminal, which is also the
+ * only way to keep a secret out of the process arguments, where it is visible to
+ * other processes and is kept in shell history.
  */
 
-export interface EnvironmentField {
+export interface InputField {
   defaultValue?: string;
+  flag: string;
   name: string;
   question: string;
   secret?: boolean;
   validate?: (value: string) => void;
 }
 
+/** Values a command was given or asked for, keyed by configuration name. */
+export type InputValues = Record<string, string | undefined>;
+
 /** Backups listed before the manual-entry choice when picking a restore. */
 const maximumListedBackups = 10;
 
-const sourceDatabaseUrl: EnvironmentField = {
+/** Prefix used when `--prefix` is absent. */
+export const defaultBackupPrefix = 'production/database';
+
+export const sourceDatabaseUrlField: InputField = {
+  flag: '--source-database-url',
   name: 'SOURCE_DATABASE_URL',
   question: 'Source database URL (postgresql://user:password@host:5432/postgres)',
   secret: true,
@@ -43,7 +52,8 @@ const sourceDatabaseUrl: EnvironmentField = {
   },
 };
 
-export const targetDatabaseUrlField: EnvironmentField = {
+export const targetDatabaseUrlField: InputField = {
+  flag: '--target-database-url',
   name: 'TARGET_DATABASE_URL',
   question: 'Target database URL to restore into',
   secret: true,
@@ -52,10 +62,8 @@ export const targetDatabaseUrlField: EnvironmentField = {
   },
 };
 
-/** Prefix offered at the prompt when neither a flag nor the environment sets one. */
-export const defaultBackupPrefix = 'production/database';
-
-export const backupPrefixField: EnvironmentField = {
+export const backupPrefixField: InputField = {
+  flag: '--prefix',
   name: 'BACKUP_PREFIX',
   question: 'Backup object-key prefix',
   defaultValue: defaultBackupPrefix,
@@ -63,75 +71,101 @@ export const backupPrefixField: EnvironmentField = {
     ensureValidBackupPrefix(value.replace(/^\/+|\/+$/gu, '')),
 };
 
-export const ageIdentityField: EnvironmentField = {
+export const ageIdentityField: InputField = {
+  flag: '--age-identity',
   name: 'AGE_IDENTITY',
   question: 'age identity used to decrypt (AGE-SECRET-KEY-1…)',
   secret: true,
   validate: ensureValidAgeIdentity,
 };
 
+export const ageRecipientField: InputField = {
+  flag: '--age-recipient',
+  name: 'BACKUP_AGE_RECIPIENT',
+  question: 'age recipient used to encrypt (age1…)',
+  validate: ensureValidAgeRecipient,
+};
+
+export const appSchemasField: InputField = {
+  flag: '--schemas',
+  name: 'APP_SCHEMAS',
+  question: 'Application schemas to back up, comma separated',
+  defaultValue: 'public',
+  validate: (value: string): void => {
+    parseAppSchemas(value);
+  },
+};
+
 /** R2 credentials and location, shared by every command. */
-export const r2Fields: readonly EnvironmentField[] = [
+export const r2Fields: readonly InputField[] = [
   {
+    flag: '--r2-endpoint',
     name: 'R2_ENDPOINT',
     question: 'R2 S3 endpoint (https://<account-id>.r2.cloudflarestorage.com)',
     validate: ensureValidR2Endpoint,
   },
   {
+    flag: '--r2-bucket',
     name: 'R2_BUCKET',
     question: 'R2 bucket name',
     validate: ensureValidR2Bucket,
   },
   {
+    flag: '--r2-access-key-id',
     name: 'R2_ACCESS_KEY_ID',
     question: 'R2 access key ID',
     secret: true,
-    validate: (value: string): void => ensureOpaqueSecret('R2_ACCESS_KEY_ID', value),
+    validate: (value: string): void => ensureOpaqueSecret('--r2-access-key-id', value),
   },
   {
+    flag: '--r2-secret-access-key',
     name: 'R2_SECRET_ACCESS_KEY',
     question: 'R2 secret access key',
     secret: true,
-    validate: (value: string): void => ensureOpaqueSecret('R2_SECRET_ACCESS_KEY', value),
+    validate: (value: string): void =>
+      ensureOpaqueSecret('--r2-secret-access-key', value),
   },
 ];
 
 /** Everything `backup` reads, in the order an operator is asked for it. */
-export const backupFields: readonly EnvironmentField[] = [
-  sourceDatabaseUrl,
-  {
-    name: 'BACKUP_AGE_RECIPIENT',
-    question: 'age recipient used to encrypt (age1…)',
-    validate: ensureValidAgeRecipient,
-  },
+export const backupFields: readonly InputField[] = [
+  sourceDatabaseUrlField,
+  ageRecipientField,
   ...r2Fields,
   backupPrefixField,
-  {
-    name: 'APP_SCHEMAS',
-    question: 'Application schemas to back up, comma separated',
-    defaultValue: 'public',
-    validate: (value: string): void => {
-      parseAppSchemas(value);
-    },
-  },
+  appSchemasField,
 ];
 
 /** Everything the read-only health check reads. */
-export const statusFields: readonly EnvironmentField[] = [...r2Fields, backupPrefixField];
+export const statusFields: readonly InputField[] = [...r2Fields, backupPrefixField];
 
-/** Returns a copy of the environment with every missing field asked for. */
-export async function fillMissingEnvironment(
-  fields: readonly EnvironmentField[],
-  env: NodeJS.ProcessEnv,
+/** Every field any command accepts, which defines the value flags the CLI parses. */
+export const allFields: readonly InputField[] = [
+  sourceDatabaseUrlField,
+  targetDatabaseUrlField,
+  ageRecipientField,
+  ageIdentityField,
+  ...r2Fields,
+  backupPrefixField,
+  appSchemasField,
+];
+
+/** Returns a copy of the values with every missing field asked for. */
+export async function fillMissingInput(
+  fields: readonly InputField[],
+  values: InputValues,
   prompter: Prompter | undefined,
-): Promise<NodeJS.ProcessEnv> {
-  const filled: NodeJS.ProcessEnv = { ...env };
+): Promise<InputValues> {
+  const filled: InputValues = { ...values };
   for (const field of fields) {
     if (filled[field.name]?.trim()) continue;
     if (!prompter) {
-      if (field.defaultValue !== undefined) continue;
+      if (field.defaultValue !== undefined) {
+        filled[field.name] = field.defaultValue;
+        continue;
+      }
       throw new BackupError(
-        `${field.name} is required. Set it in the environment, or run the command in a terminal to be asked for it.`,
+        `${field.flag} is required. Pass it, or run the command in a terminal to be asked for it.`,
       );
     }
     filled[field.name] = await prompter.text(field.question, {

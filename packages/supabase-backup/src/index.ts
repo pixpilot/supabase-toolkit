@@ -1,6 +1,7 @@
 export { backup, backupWithConfig } from './backup.js';
 export {
   type CliArguments,
+  inputFromArguments,
   parseArguments,
   planCommand,
   runCli,
@@ -15,12 +16,14 @@ export {
 } from './database-url.js';
 export { BackupError } from './errors.js';
 export {
+  allFields,
   backupFields,
   chooseManifestKey,
   confirmRestoreTarget,
   defaultBackupPrefix,
-  type EnvironmentField,
-  fillMissingEnvironment,
+  fillMissingInput,
+  type InputField,
+  type InputValues,
   r2Fields,
   statusFields,
 } from './interactive.js';

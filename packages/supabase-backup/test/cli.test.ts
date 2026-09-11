@@ -1,32 +1,43 @@
 import type { CliArguments } from '../src/command-line.js';
+import type { InputValues } from '../src/interactive.js';
 import type { Prompter, TextPromptOptions } from '../src/prompt.js';
 import type { ObjectStore } from '../src/r2.js';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { parseArguments, planCommand, usage } from '../src/command-line.js';
+import {
+  inputFromArguments,
+  parseArguments,
+  planCommand,
+  usage,
+} from '../src/command-line.js';
 import { BackupError } from '../src/errors.js';
 import {
   backupFields,
   chooseManifestKey,
   confirmRestoreTarget,
   defaultBackupPrefix,
-  fillMissingEnvironment,
+  fillMissingInput,
   r2Fields,
   statusFields,
 } from '../src/interactive.js';
 import { createPrompter, isInteractive } from '../src/prompt.js';
 
-const env: NodeJS.ProcessEnv = {
-  SOURCE_DATABASE_URL:
+/** The flags a fully specified run passes. */
+const connectionFlags: Record<string, string> = {
+  '--source-database-url':
     'postgresql://backup:secret@db.example.test:5432/postgres?sslmode=require',
-  BACKUP_AGE_RECIPIENT: 'age1recipient',
-  AGE_IDENTITY: 'AGE-SECRET-KEY-1TESTIDENTITY',
-  R2_ACCESS_KEY_ID: 'key',
-  R2_SECRET_ACCESS_KEY: 'secret',
-  R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
-  R2_BUCKET: 'private-backups',
-  BACKUP_PREFIX: 'production/database',
+  '--age-recipient': 'age1recipient',
+  '--age-identity': 'AGE-SECRET-KEY-1TESTIDENTITY',
+  '--r2-access-key-id': 'key',
+  '--r2-secret-access-key': 'secret',
+  '--r2-endpoint': 'https://account.r2.cloudflarestorage.com',
+  '--r2-bucket': 'private-backups',
+  '--prefix': 'production/database',
+  '--schemas': 'public',
 };
+
+/** The same values keyed the way the loaders read them. */
+const given: InputValues = inputFromArguments(args('backup', connectionFlags));
 
 /** Records what was asked and replays scripted answers. */
 class StubPrompter implements Prompter {
@@ -160,53 +171,52 @@ describe('command-line parsing', () => {
 });
 
 describe('filling missing values', () => {
-  it('asks only for values the environment does not already hold', async () => {
-    const prompter = new StubPrompter(['production/database']);
-    const filled = await fillMissingEnvironment(
+  it('asks only for values the flags did not supply', async () => {
+    const prompter = new StubPrompter(['staging/database']);
+    const filled = await fillMissingInput(
       statusFields,
-      { ...env, BACKUP_PREFIX: '' },
+      { ...given, BACKUP_PREFIX: '' },
       prompter,
     );
     expect(prompter.asked).toHaveLength(1);
     expect(prompter.asked[0]).toContain('prefix');
-    expect(filled['BACKUP_PREFIX']).toBe('production/database');
+    expect(filled['BACKUP_PREFIX']).toBe('staging/database');
     expect(filled['R2_BUCKET']).toBe('private-backups');
   });
 
   it('re-asks after an answer that cannot work', async () => {
     const prompter = new StubPrompter(['not-a-url']);
-    await expect(fillMissingEnvironment(r2Fields, {}, prompter)).rejects.toThrow(
-      'R2_ENDPOINT must be an absolute URL',
+    await expect(fillMissingInput(r2Fields, {}, prompter)).rejects.toThrow(
+      'must be an absolute URL',
     );
   });
 
-  it('offers the standard prefix when neither a flag nor the environment sets one', async () => {
+  it('offers a visible default that an empty answer accepts', async () => {
     const prompter = new StubPrompter([]);
-    const filled = await fillMissingEnvironment(
-      statusFields,
-      { ...env, BACKUP_PREFIX: '' },
+    const filled = await fillMissingInput(
+      backupFields,
+      { ...given, APP_SCHEMAS: '' },
       prompter,
     );
-    expect(defaultBackupPrefix).toBe('production/database');
-    expect(filled['BACKUP_PREFIX']).toBe(defaultBackupPrefix);
-  });
-
-  it('offers a default that an empty answer accepts', async () => {
-    const prompter = new StubPrompter([]);
-    const filled = await fillMissingEnvironment(backupFields, env, prompter);
     expect(prompter.asked).toEqual(['Application schemas to back up, comma separated']);
     expect(filled['APP_SCHEMAS']).toBe('public');
   });
 
-  it('leaves a defaulted value to the loader when nothing can be asked', async () => {
-    const filled = await fillMissingEnvironment(backupFields, env, undefined);
-    expect(filled['APP_SCHEMAS']).toBeUndefined();
+  it('applies the standard prefix and schemas when nothing can be asked', async () => {
+    const filled = await fillMissingInput(
+      backupFields,
+      { ...given, BACKUP_PREFIX: '', APP_SCHEMAS: '' },
+      undefined,
+    );
+    expect(defaultBackupPrefix).toBe('production/database');
+    expect(filled['BACKUP_PREFIX']).toBe(defaultBackupPrefix);
+    expect(filled['APP_SCHEMAS']).toBe('public');
   });
 
-  it('fails with an actionable message when nothing can be asked', async () => {
+  it('names the missing flag when nothing can be asked', async () => {
     await expect(
-      fillMissingEnvironment(statusFields, { ...env, R2_BUCKET: '' }, undefined),
-    ).rejects.toThrow('R2_BUCKET is required. Set it in the environment');
+      fillMissingInput(statusFields, { ...given, R2_BUCKET: '' }, undefined),
+    ).rejects.toThrow('--r2-bucket is required. Pass it,');
   });
 });
 
@@ -275,14 +285,26 @@ describe('confirming a restore target', () => {
 });
 
 describe('planning a command', () => {
-  it('never asks for a value that a flag already supplied', async () => {
-    const prompter = new StubPrompter(['unused']);
-    await planCommand(
-      args('backup', { '--prefix': 'staging/database', '--schemas': 'public,billing' }),
-      { ...env, BACKUP_PREFIX: '', APP_SCHEMAS: '' },
-      prompter,
+  it('keeps configuration flags apart from command flags', () => {
+    const parsed = inputFromArguments(
+      args('restore', { ...connectionFlags, '--key': 'a/manifest.json' }),
     );
+    expect(parsed['R2_BUCKET']).toBe('private-backups');
+    expect(parsed['AGE_IDENTITY']).toBe('AGE-SECRET-KEY-1TESTIDENTITY');
+    expect(Object.keys(parsed)).not.toContain('--key');
+  });
+
+  it('asks for nothing when every value arrives as a flag', async () => {
+    const prompter = new StubPrompter();
+    await planCommand(args('backup', connectionFlags), prompter);
     expect(prompter.asked).toEqual([]);
+  });
+
+  it('asks only for the values the flags left out', async () => {
+    const prompter = new StubPrompter(['age1recipient']);
+    const { '--age-recipient': _recipient, ...withoutRecipient } = connectionFlags;
+    await planCommand(args('backup', withoutRecipient), prompter);
+    expect(prompter.asked).toEqual(['age recipient used to encrypt (age1…)']);
   });
 
   it('asks which backup to restore when --key is absent', async () => {
@@ -290,7 +312,7 @@ describe('planning a command', () => {
     const key = 'production/database/v1/20260101T000000Z/manifest.json';
     store.values.set(key, Buffer.from('{}'));
     const prompter = new StubPrompter([], [false], [0]);
-    const run = await planCommand(args('restore'), env, prompter, { store });
+    const run = await planCommand(args('restore', connectionFlags), prompter, { store });
     expect(prompter.asked).toEqual([
       'Select a backup to restore (newest first):',
       'Apply this backup to the target database? It writes data.',
@@ -299,19 +321,41 @@ describe('planning a command', () => {
   });
 
   it('requires --key when the session cannot be asked', async () => {
-    await expect(planCommand(args('restore'), env, undefined)).rejects.toThrow(
+    await expect(
+      planCommand(args('restore', connectionFlags), undefined),
+    ).rejects.toThrow(
       'restore requires --key <manifest-key> when the session is not a terminal.',
     );
   });
 
   it('rejects a manifest key that could escape the backup namespace', async () => {
     await expect(
-      planCommand(args('restore', { '--key': '../secrets.json' }), env, undefined),
+      planCommand(
+        args('restore', { ...connectionFlags, '--key': '../secrets.json' }),
+        undefined,
+      ),
     ).rejects.toThrow('--key must be an immutable backup manifest key ending in .json.');
   });
 
+  it('requires the typed target when --apply cannot be confirmed at a prompt', async () => {
+    await expect(
+      planCommand(
+        args(
+          'restore',
+          {
+            ...connectionFlags,
+            '--key': 'production/database/v1/20260101T000000Z/manifest.json',
+            '--target-database-url': 'postgresql://restore:secret@db.test:5432/postgres',
+          },
+          ['--apply'],
+        ),
+        undefined,
+      ),
+    ).rejects.toThrow("--apply requires --confirm-target '<host>:<port>/<database>'.");
+  });
+
   it('reports usage for an unknown command', async () => {
-    await expect(planCommand(args('rollback'), env, undefined)).rejects.toThrow('Usage:');
+    await expect(planCommand(args('rollback'), undefined)).rejects.toThrow('Usage:');
   });
 });
 
