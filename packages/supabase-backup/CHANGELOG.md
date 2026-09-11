@@ -1,5 +1,13 @@
 # @pixpilot/supabase-backup
 
+## 1.6.1
+
+### Patch Changes
+
+- improve error logging formatting
+- pin S3 SDK and expose R2 error metadata
+- f8c6bf8: Pin the S3 SDK used for R2 and include safe R2 error metadata in CLI failures.
+
 ## 1.6.0
 
 ### Minor Changes
