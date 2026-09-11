@@ -18,6 +18,7 @@ export {
   backupFields,
   chooseManifestKey,
   confirmRestoreTarget,
+  defaultBackupPrefix,
   type EnvironmentField,
   fillMissingEnvironment,
   r2Fields,

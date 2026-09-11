@@ -52,9 +52,13 @@ export const targetDatabaseUrlField: EnvironmentField = {
   },
 };
 
+/** Prefix offered at the prompt when neither a flag nor the environment sets one. */
+export const defaultBackupPrefix = 'production/database';
+
 export const backupPrefixField: EnvironmentField = {
   name: 'BACKUP_PREFIX',
-  question: 'Backup object-key prefix (for example production/database)',
+  question: 'Backup object-key prefix',
+  defaultValue: defaultBackupPrefix,
   validate: (value: string): void =>
     ensureValidBackupPrefix(value.replace(/^\/+|\/+$/gu, '')),
 };

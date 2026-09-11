@@ -14,5 +14,10 @@ resolved before the command starts, and non-terminal sessions such as CI never
 prompt: they fail immediately naming the missing variable, which `--no-input`
 also forces in a terminal.
 
+The prefix prompt offers `production/database` as its default and `APP_SCHEMAS`
+offers `public`, both accepted by pressing Enter. Defaults apply only at the
+prompt: a non-terminal session still fails when `BACKUP_PREFIX` is unset, so a
+misconfigured job cannot fall back to the production prefix silently.
+
 Adds `--prefix`, `--schemas`, `--no-input`, and `--help`, and unknown options now
 fail instead of being ignored.

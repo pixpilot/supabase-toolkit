@@ -128,18 +128,22 @@ what is still missing is asked, so `restore --key <manifest-key>` never asks
 about the key again:
 
 ```bash
-npx @pixpilot/supabase-backup@1 restore
+npx @pixpilot/supabase-backup@latest restore
 # Select a backup to restore (newest first):
 #   1) production/database/v1/20260911T031700Z
 #   2) production/database/v1/20260910T031700Z
 #   3) Enter another manifest key
 # Select 1-3: 1
+# Backup object-key prefix [production/database]:
 # age identity used to decrypt (AGE-SECRET-KEY-1…):
 # Apply this backup to the target database? It writes data. [y/N]: y
 # Target database URL to restore into:
 # Type 'db.example.test:5432/postgres' to confirm the restore target:
 ```
 
+- The prefix prompt offers `production/database` as its default, so pressing
+  Enter accepts it; `APP_SCHEMAS` defaults to `public` the same way. A default is
+  only ever shown for a value that is safe to display, never for a secret.
 - Secrets are read only from the environment or a hidden prompt, never from a
   flag, because command-line arguments are visible to other processes and are
   kept in shell history. Typed secrets are not echoed.
@@ -150,7 +154,9 @@ npx @pixpilot/supabase-backup@1 restore
 - Prompts are written to stderr, so `stdout` stays machine readable.
 
 Non-terminal sessions, including GitHub Actions, never prompt: a missing value
-fails immediately with the name of the variable to set. Add `--no-input` to get
+fails immediately with the name of the variable to set, and the prompt defaults
+are not applied there, so a misconfigured job cannot fall back to the production
+prefix silently. Add `--no-input` to get
 that behaviour in a terminal, for example inside a wrapper script.
 
 `--prefix` overrides `BACKUP_PREFIX` and `--schemas` overrides `APP_SCHEMAS`;

@@ -64,9 +64,10 @@ Options:
   -h, --help                Show this help.
 
 Anything not supplied is asked for when the session is a terminal, so a missing
---key offers the newest backups to choose from. Secrets such as database URLs,
-R2 credentials, and the age identity are read only from the environment or a
-hidden prompt, never from a flag.`;
+--key offers the newest backups to choose from, and the prefix is asked with the
+default 'production/database'. Secrets such as database URLs, R2 credentials,
+and the age identity are read only from the environment or a hidden prompt,
+never from a flag.`;
 
 /** Parses argv strictly, so a typo fails instead of silently changing a run. */
 export function parseArguments(args: readonly string[]): CliArguments {

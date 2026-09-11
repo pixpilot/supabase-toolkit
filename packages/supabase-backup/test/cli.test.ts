@@ -9,6 +9,7 @@ import {
   backupFields,
   chooseManifestKey,
   confirmRestoreTarget,
+  defaultBackupPrefix,
   fillMissingEnvironment,
   r2Fields,
   statusFields,
@@ -179,6 +180,17 @@ describe('filling missing values', () => {
     );
   });
 
+  it('offers the standard prefix when neither a flag nor the environment sets one', async () => {
+    const prompter = new StubPrompter([]);
+    const filled = await fillMissingEnvironment(
+      statusFields,
+      { ...env, BACKUP_PREFIX: '' },
+      prompter,
+    );
+    expect(defaultBackupPrefix).toBe('production/database');
+    expect(filled['BACKUP_PREFIX']).toBe(defaultBackupPrefix);
+  });
+
   it('offers a default that an empty answer accepts', async () => {
     const prompter = new StubPrompter([]);
     const filled = await fillMissingEnvironment(backupFields, env, prompter);
@@ -340,6 +352,18 @@ describe('terminal prompting', () => {
     await expect(answer).resolves.toBe('super-secret-value');
     expect(streams.written()).toContain('R2 secret access key');
     expect(streams.written()).not.toContain('super-secret-value');
+    prompter.close();
+  });
+
+  it('shows a visible default and accepts it on an empty answer', async () => {
+    const streams = terminalStreams();
+    const prompter = createPrompter(streams);
+    const answer = prompter.text('Backup object-key prefix', {
+      defaultValue: defaultBackupPrefix,
+    });
+    streams.input.write('\n');
+    await expect(answer).resolves.toBe(defaultBackupPrefix);
+    expect(streams.written()).toContain('[production/database]');
     prompter.close();
   });
 
