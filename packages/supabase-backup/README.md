@@ -54,10 +54,10 @@ Location: your terminal or the repository that calls this reusable workflow.
 
 Every value is a flag; the CLI reads no environment configuration. Leave any of
 them out in a terminal and you are asked for it, so the shortest run is
-`npx @pixpilot/supabase-backup@2 backup`.
+`npx @pixpilot/supabase-backup@latest backup`.
 
 ```bash
-npx @pixpilot/supabase-backup@2 backup \
+npx @pixpilot/supabase-backup@latest backup \
   --source-database-url 'postgresql://…' \
   --age-recipient 'age1…' \
   --r2-access-key-id … \
@@ -116,7 +116,7 @@ hashes, decrypts in a private temporary directory, inspects both archives, and
 does nothing unless `--apply` is present. Apply only to a fresh recovery project.
 
 ```bash
-npx @pixpilot/supabase-backup@2 restore \
+npx @pixpilot/supabase-backup@latest restore \
   --key <manifest-key> \
   --age-identity 'AGE-SECRET-KEY-…' \
   --r2-access-key-id … \
@@ -144,7 +144,7 @@ stdin and stderr are a terminal. Only what is missing is asked, so
 `restore --key <manifest-key>` never asks about the key again:
 
 ```bash
-npx @pixpilot/supabase-backup@2 restore \
+npx @pixpilot/supabase-backup@latest restore \
   --r2-endpoint 'https://<account-id>.r2.cloudflarestorage.com' \
   --r2-bucket 'roleclick-backups' \
   --r2-access-key-id … \
@@ -222,7 +222,7 @@ alone and the values are masked in the log.
 Backup, with every flag it accepts:
 
 ```bash
-npx @pixpilot/supabase-backup@2 backup \
+npx @pixpilot/supabase-backup@latest backup \
   --source-database-url 'postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres' \
   --age-recipient 'age1…' \
   --r2-access-key-id … \
@@ -237,7 +237,7 @@ npx @pixpilot/supabase-backup@2 backup \
 Status, with every flag it accepts:
 
 ```bash
-npx @pixpilot/supabase-backup@2 status \
+npx @pixpilot/supabase-backup@latest status \
   --r2-access-key-id … \
   --r2-secret-access-key … \
   --r2-endpoint 'https://<account-id>.r2.cloudflarestorage.com' \
@@ -250,7 +250,7 @@ npx @pixpilot/supabase-backup@2 status \
 Restore as a dry run, which verifies and decrypts the archives and writes nothing:
 
 ```bash
-npx @pixpilot/supabase-backup@2 restore \
+npx @pixpilot/supabase-backup@latest restore \
   --key production/database/v1/20260911T131038Z/manifest.json \
   --age-identity 'AGE-SECRET-KEY-…' \
   --r2-access-key-id … \
@@ -263,7 +263,7 @@ npx @pixpilot/supabase-backup@2 restore \
 Restore with every flag, applying to a fresh recovery database:
 
 ```bash
-npx @pixpilot/supabase-backup@2 restore \
+npx @pixpilot/supabase-backup@latest restore \
   --key production/database/v1/20260911T131038Z/manifest.json \
   --age-identity 'AGE-SECRET-KEY-…' \
   --r2-access-key-id … \
@@ -318,8 +318,9 @@ jobs:
 
 `postgres-client-version` and `package-version` are optional. `package-version` is
 the npm range the job runs (`npx @pixpilot/supabase-backup@<range>`) and defaults to
-the current major, `2`; pin an exact version if you want releases to reach this job
-only when you bump it.
+`latest`, so the job follows every release, including a breaking major. Pin a major
+such as `2`, or an exact version, if you want releases to reach this job only when
+you bump it.
 
 `postgres-client-version` selects the `postgresql-client-<major>` package installed
 from the PostgreSQL APT repository; it defaults to `17`. It must be greater than or
@@ -338,7 +339,7 @@ bucket**.
    listed in the [command reference](#command-reference):
 
    ```bash
-   npx @pixpilot/supabase-backup@2 status --max-age-hours 36
+   npx @pixpilot/supabase-backup@latest status --max-age-hours 36
    ```
 
 2. Confirm it prints a completed manifest key.

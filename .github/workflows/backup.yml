@@ -9,7 +9,7 @@ on:
       r2-bucket: {required: true, type: string}
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
-      package-version: {required: false, default: '2', type: string}
+      package-version: {required: false, default: latest, type: string}
     secrets:
       database-url: {required: true}
       r2-access-key-id: {required: true}
