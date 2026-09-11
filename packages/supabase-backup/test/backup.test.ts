@@ -21,6 +21,7 @@ import { BackupError } from '../src/errors.js';
 import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from '../src/files.js';
 import { authTables, backupObjectKeys, parseManifest } from '../src/manifest.js';
 import { systemRunner } from '../src/process.js';
+import { r2ErrorDetails } from '../src/r2.js';
 import { redact } from '../src/redact.js';
 import { restore } from '../src/restore.js';
 import { getBackupStatus } from '../src/status.js';
@@ -130,6 +131,16 @@ describe('configuration and safety', () => {
     expect(redact('postgresql://a:password@host/db AGE-SECRET-KEY-123')).not.toContain(
       'password',
     );
+  });
+
+  it('formats safe R2 error metadata without exposing an error message', () => {
+    expect(
+      r2ErrorDetails({
+        Code: 'SignatureDoesNotMatch',
+        message: 'contains a secret',
+        $metadata: { httpStatusCode: 403, requestId: 'request-123' },
+      }),
+    ).toBe(' [r2Code=SignatureDoesNotMatch, httpStatus=403, requestId=request-123]');
   });
 });
 

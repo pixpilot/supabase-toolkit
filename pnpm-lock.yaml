@@ -146,7 +146,7 @@ importers:
   packages/supabase-backup:
     dependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.1129.0
+        specifier: 3.1129.0
         version: 3.1129.0
       pg:
         specifier: ^8.23.0

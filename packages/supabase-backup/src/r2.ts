@@ -16,6 +16,26 @@ export interface ObjectStore {
   putImmutable: (key: string, body: Uint8Array) => Promise<void>;
 }
 
+/** Formats safe S3 error metadata for actionable R2 CLI diagnostics. */
+export function r2ErrorDetails(error: unknown): string {
+  const r2Error = error as {
+    $metadata?: { httpStatusCode?: unknown; requestId?: unknown };
+    Code?: unknown;
+    name?: unknown;
+  };
+  let code: string | undefined;
+  if (typeof r2Error.Code === 'string') code = r2Error.Code;
+  else if (typeof r2Error.name === 'string') code = r2Error.name;
+  const status = r2Error.$metadata?.httpStatusCode;
+  const requestId = r2Error.$metadata?.requestId;
+  const values = [
+    code && `r2Code=${code}`,
+    typeof status === 'number' && `httpStatus=${status}`,
+    typeof requestId === 'string' && `requestId=${requestId}`,
+  ].filter(Boolean);
+  return values.length ? ` [${values.join(', ')}]` : '';
+}
+
 /** R2 object store using S3-compatible, path-style requests. */
 export class R2Store implements ObjectStore {
   private readonly client: S3Client;
@@ -43,7 +63,7 @@ export class R2Store implements ObjectStore {
           ?.httpStatusCode === 404
       )
         return false;
-      throw new BackupError('R2 object lookup failed.');
+      throw new BackupError(`R2 object lookup failed${r2ErrorDetails(error)}.`);
     }
   }
 
