@@ -1,5 +1,41 @@
 # @pixpilot/supabase-backup
 
+## 2.0.0
+
+### Major Changes
+
+- 803efb1: Take every value as a flag and ask for what is missing. The CLI no longer reads
+  the environment: `--source-database-url`, `--target-database-url`,
+  `--age-recipient`, `--age-identity`, `--r2-endpoint`, `--r2-bucket`,
+  `--r2-access-key-id`, `--r2-secret-access-key`, `--prefix`, and `--schemas`
+  replace `SOURCE_DATABASE_URL`, `TARGET_DATABASE_URL`, `BACKUP_AGE_RECIPIENT`,
+  `AGE_IDENTITY`, `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`, `BACKUP_PREFIX`, and `APP_SCHEMAS`. The library entry
+  points still take the same configuration object, so only the CLI changes.
+
+  Anything a flag did not supply is asked for when the session is a terminal, so
+  `restore` with no `--key` lists the newest backups to pick from, and `--apply`
+  asks for the target database URL and the typed target confirmation. A value that
+  was passed is never asked about again, a secret typed at the prompt is not echoed
+  and never reaches the process arguments, prompts go to stderr, and every value is
+  resolved before the command starts.
+
+  `--prefix` defaults to `production/database` and `--schemas` to `public`. A
+  non-terminal session, such as CI, never prompts: it fails naming the flag to
+  pass, which `--no-input` also forces in a terminal.
+
+  Adds `--no-input` and `--help`, and unknown options now fail instead of being
+  ignored. The reusable workflow passes the new flags.
+
+### Minor Changes
+
+- update package version to `latest` in workflow and documentation
+- enhance backup restoration process with detailed timestamps
+- refactor command-line interface for improved input handling
+- update version to 1.8.0 and enhance CLI functionality
+- enhance CLI prompts for missing inputs and defaults
+- 803efb1: Write each backup as one immutable folder, `BACKUP_PREFIX/v1/<UTC timestamp>/`, holding fixed names `app.dump.age`, `app.sha256`, `auth.dump.age`, `auth.sha256`, and `manifest.json`, replacing the previous `BACKUP_PREFIX/YYYY/MM/DD/<timestamp>.<name>` keys. Timestamps are compact UTC (`20260911T031700Z`) so folders still sort chronologically, and `v1` marks the key-layout generation. `status` now discovers manifests under `BACKUP_PREFIX/v1/` and no longer reports pre-`v1` backups; `restore --key` still reads them, because every manifest carries the full object keys of its own archives. Existing lifecycle rules scoped to `BACKUP_PREFIX/` continue to match.
+
 ## 1.8.0
 
 ### Minor Changes
