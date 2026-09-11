@@ -102,9 +102,21 @@ your bucket → Settings → Object Lifecycle Rules.
 
 1. Select **Add rule**.
 2. Name the rule, such as `production-backups-30-days`.
-3. Set the prefix to `production/database/v1/` — your `--prefix` plus `/v1/`.
+3. Set the prefix to `production/database/` — your `--prefix` plus a trailing
+   slash.
 4. Set **Delete objects** to `30` days.
 5. Save the rule.
+
+Stopping at `--prefix` covers every key layout, so a future generation beside
+`v1/`, and the pre-`v1` `YYYY/MM/DD/` keys, expire under the same rule. Keep the
+trailing slash: without it the rule would also match a sibling such as
+`production/database-archive/`. Scope it to `production/database/v1/` instead
+only if you keep something under that prefix that must not expire.
+
+Each object is deleted on its own clock, that many days after it was written, so
+the newest backup is never at risk: the prefix decides which objects the age
+applies to, not what is deleted now. Thirty daily backups under a 30-day rule
+settle into a rolling 30-day window.
 
 Cloudflare applies lifecycle deletion independently of this CLI; objects are
 typically removed within 24 hours of their expiry. See Cloudflare's
@@ -416,7 +428,7 @@ bucket**.
 3. Open the R2 bucket and confirm one `<prefix>/v1/<timestamp>/` folder holds
    `manifest.json` plus the encrypted app and Auth archives and their checksums.
 4. Open **Settings → Object Lifecycle Rules** and confirm the enabled rule matches
-   `<prefix>/v1/` and its retention period.
+   `<prefix>/` and its retention period.
 
 ## Gotchas
 
@@ -424,5 +436,6 @@ bucket**.
 - Lifecycle deletion is asynchronous and typically occurs within 24 hours after expiry.
 - Backups written before `v1` used a `<prefix>/YYYY/MM/DD/<timestamp>.*` layout.
   `status` no longer sees them; `restore --key` still reads them, because a manifest
-  carries the full object keys of its own archives. Keep the old lifecycle rule until
-  those objects expire.
+  carries the full object keys of its own archives. A lifecycle rule scoped to
+  `<prefix>/` expires them alongside everything else; one scoped to `<prefix>/v1/`
+  leaves them until you add a second rule.
