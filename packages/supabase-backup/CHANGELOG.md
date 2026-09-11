@@ -1,5 +1,27 @@
 # @pixpilot/supabase-backup
 
+## 1.8.0
+
+### Minor Changes
+
+- add interactive CLI and versioned backups
+- 803efb1: Ask for missing CLI input instead of failing. `backup`, `status`, and `restore`
+  now prompt for any value that was not supplied by a flag or the environment when
+  the session is a terminal, so `restore` with no `--key` lists the newest backups
+  to pick from, and `--apply` asks for the target database URL and the typed target
+  confirmation. A value that is already present is never asked about again.
+
+  Secrets are accepted only from the environment or a hidden prompt, never from a
+  flag, and typed secrets are not echoed. Prompts go to stderr, every value is
+  resolved before the command starts, and non-terminal sessions such as CI never
+  prompt: they fail immediately naming the missing variable, which `--no-input`
+  also forces in a terminal.
+
+  Adds `--prefix`, `--schemas`, `--no-input`, and `--help`, and unknown options now
+  fail instead of being ignored.
+
+- 803efb1: Write each backup as one immutable folder, `BACKUP_PREFIX/v1/<UTC timestamp>/`, holding fixed names `app.dump.age`, `app.sha256`, `auth.dump.age`, `auth.sha256`, and `manifest.json`, replacing the previous `BACKUP_PREFIX/YYYY/MM/DD/<timestamp>.<name>` keys. Timestamps are compact UTC (`20260911T031700Z`) so folders still sort chronologically, and `v1` marks the key-layout generation. `status` now discovers manifests under `BACKUP_PREFIX/v1/` and no longer reports pre-`v1` backups; `restore --key` still reads them, because every manifest carries the full object keys of its own archives. Existing lifecycle rules scoped to `BACKUP_PREFIX/` continue to match.
+
 ## 1.7.0
 
 ### Minor Changes

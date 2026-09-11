@@ -128,13 +128,13 @@ what is still missing is asked, so `restore --key <manifest-key>` never asks
 about the key again:
 
 ```bash
-npx @pixpilot/supabase-backup@latest restore
+npx @pixpilot/supabase-backup@1 restore
+# Backup object-key prefix [production/database]:
 # Select a backup to restore (newest first):
 #   1) production/database/v1/20260911T031700Z
 #   2) production/database/v1/20260910T031700Z
 #   3) Enter another manifest key
 # Select 1-3: 1
-# Backup object-key prefix [production/database]:
 # age identity used to decrypt (AGE-SECRET-KEY-1…):
 # Apply this backup to the target database? It writes data. [y/N]: y
 # Target database URL to restore into:
@@ -161,6 +161,96 @@ that behaviour in a terminal, for example inside a wrapper script.
 
 `--prefix` overrides `BACKUP_PREFIX` and `--schemas` overrides `APP_SCHEMAS`;
 `--help` lists every option.
+
+## Command reference
+
+Location: your terminal, a wrapper script, or a CI job.
+
+Every flag is optional in a terminal, where anything missing is asked for. The
+commands below pass everything explicitly, which is what an unattended run needs.
+`--no-input` makes that explicit: it fails on a missing value instead of asking,
+so a script never blocks.
+
+| Option                     | Commands  | Purpose                                             |
+| -------------------------- | --------- | --------------------------------------------------- |
+| `--prefix <prefix>`        | all       | Object-key prefix; overrides `BACKUP_PREFIX`.       |
+| `--schemas <a,b>`          | `backup`  | Application schemas; overrides `APP_SCHEMAS`.       |
+| `--max-age-hours <hours>`  | `status`  | Fail when the newest backup is older.               |
+| `--key <manifest-key>`     | `restore` | Manifest to restore, ending in `.json`.             |
+| `--apply`                  | `restore` | Write to `TARGET_DATABASE_URL`; omit for a dry run. |
+| `--confirm-target <label>` | `restore` | Typed confirmation, `<host>:<port>/<database>`.     |
+| `--no-input`               | all       | Never ask; fail when a value is missing.            |
+| `-h`, `--help`             | all       | Print the option list.                              |
+
+Secrets have no flag. `SOURCE_DATABASE_URL`, `TARGET_DATABASE_URL`,
+`AGE_IDENTITY`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` come from the
+environment or a hidden prompt only, because command-line arguments are visible
+to other processes and are kept in shell history.
+
+Backup, with every flag it accepts:
+
+```bash
+SOURCE_DATABASE_URL='postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres' \
+BACKUP_AGE_RECIPIENT='age1…' \
+R2_ACCESS_KEY_ID=… \
+R2_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT='https://<account-id>.r2.cloudflarestorage.com' \
+R2_BUCKET='roleclick-backups' \
+npx @pixpilot/supabase-backup@1 backup \
+  --prefix production/database \
+  --schemas public \
+  --no-input
+```
+
+Status, with every flag it accepts:
+
+```bash
+R2_ACCESS_KEY_ID=… \
+R2_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT='https://<account-id>.r2.cloudflarestorage.com' \
+R2_BUCKET='roleclick-backups' \
+npx @pixpilot/supabase-backup@1 status \
+  --prefix production/database \
+  --max-age-hours 36 \
+  --no-input
+```
+
+Restore as a dry run, which reads nothing but the archives and writes nothing:
+
+```bash
+AGE_IDENTITY='AGE-SECRET-KEY-…' \
+R2_ACCESS_KEY_ID=… \
+R2_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT='https://<account-id>.r2.cloudflarestorage.com' \
+R2_BUCKET='roleclick-backups' \
+npx @pixpilot/supabase-backup@1 restore \
+  --key production/database/v1/20260911T131038Z/manifest.json \
+  --no-input
+```
+
+Restore with every flag, applying to a fresh recovery database:
+
+```bash
+AGE_IDENTITY='AGE-SECRET-KEY-…' \
+R2_ACCESS_KEY_ID=… \
+R2_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT='https://<account-id>.r2.cloudflarestorage.com' \
+R2_BUCKET='roleclick-backups' \
+TARGET_DATABASE_URL='postgresql://postgres:<password>@db.<recovery-ref>.supabase.co:5432/postgres' \
+SOURCE_DATABASE_URL='postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres' \
+npx @pixpilot/supabase-backup@1 restore \
+  --key production/database/v1/20260911T131038Z/manifest.json \
+  --prefix production/database \
+  --apply \
+  --confirm-target 'db.<recovery-ref>.supabase.co:5432/postgres' \
+  --no-input
+```
+
+`--confirm-target` must equal the `<host>:<port>/<database>` of
+`TARGET_DATABASE_URL` exactly, or the restore stops before touching anything.
+`SOURCE_DATABASE_URL` is optional here and only used to refuse a target that is
+the source. `--prefix` is unnecessary once `--key` is given, because the manifest
+carries the object keys of its own archives.
 
 ## Reusable workflow
 
