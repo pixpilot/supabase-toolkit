@@ -131,9 +131,14 @@ npx @pixpilot/supabase-backup@latest restore \
 Running `restore` with no flags walks you through the same steps, including a
 list of the newest backups to choose from.
 
-Apply restores Auth data before application data, never cleans `auth`, requires
-empty target Auth tables, and rejects a target matching `--source-database-url`.
-Verify user login and a representative application workflow manually afterward.
+Apply restores Auth data before application data and only ever adds objects: it
+requires the target Auth tables and the application schemas to be empty, and
+rejects a target matching `--source-database-url`. If the target already holds
+those tables, restore into a fresh recovery database, or drop and recreate the
+schema first — `pg_restore --clean` cannot make room for you, because its
+`DROP … IF EXISTS` statements still fail when the table an object belongs to is
+missing. Verify user login and a representative application workflow manually
+afterward.
 
 ## Interactive prompts
 

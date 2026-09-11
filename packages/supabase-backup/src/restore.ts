@@ -5,6 +5,7 @@ import type { ObjectStore } from './r2.js';
 import { join } from 'node:path';
 import {
   connectForPreflight,
+  ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
   ensureCountsMatch,
@@ -33,6 +34,51 @@ export interface RestoreOptions {
   apply: boolean;
   confirmTarget?: string;
   key: string;
+}
+
+/**
+ * Names the database every restoring `pg_restore` writes into.
+ *
+ * The rest of the connection arrives through the libpq environment, which keeps
+ * the password out of the process arguments, but `--dbname` has no environment
+ * equivalent: PostgreSQL 16 and later refuse to run without `-d` or `-f`, and
+ * earlier versions would silently print SQL to stdout instead of restoring.
+ */
+export function authRestoreArguments(
+  database: string,
+  table: string,
+  archive: string,
+): string[] {
+  return [
+    '--dbname',
+    database,
+    '--data-only',
+    '--no-owner',
+    '--no-privileges',
+    '--exit-on-error',
+    `--table=${table}`,
+    archive,
+  ];
+}
+
+/**
+ * Arguments that load the application schemas into an empty target.
+ *
+ * There is deliberately no `--clean`: its `DROP … IF EXISTS` statements guard
+ * only the object, not the table it belongs to, so cleaning a database that does
+ * not already hold the whole schema aborts the restore. The preflight requires
+ * empty application schemas instead, which also means a restore never drops
+ * anything.
+ */
+export function appRestoreArguments(database: string, archive: string): string[] {
+  return [
+    '--dbname',
+    database,
+    '--no-owner',
+    '--no-privileges',
+    '--exit-on-error',
+    archive,
+  ];
 }
 
 /** Downloads, verifies, decrypts, and optionally restores a single manifest. */
@@ -123,37 +169,22 @@ export async function restore(
       await ensureAuthCompatible(targetDb, manifest.authColumns);
       if (!options.apply) {
         process.stdout.write(
-          `Restore plan (no changes): target ${databaseLabel(target)}; Auth tables ${manifest.authTables.join(', ')} then application schemas ${manifest.appSchemas.join(', ')}.\n`,
+          `Restore plan (no changes): target ${databaseLabel(target)}; Auth tables ${manifest.authTables.join(', ')} then application schemas ${manifest.appSchemas.join(', ')}. Applying requires those schemas and the target Auth tables to be empty.\n`,
         );
         return manifest;
       }
       await ensureAuthTablesEmpty(targetDb);
+      await ensureApplicationSchemasEmpty(targetDb, manifest.appSchemas);
       const pgEnv = toLibpqEnvironment(target);
       for (const table of manifest.authTables)
         await runner.run(
           'pg_restore',
-          [
-            '--data-only',
-            '--no-owner',
-            '--no-privileges',
-            '--exit-on-error',
-            `--table=${table}`,
-            authDump,
-          ],
+          authRestoreArguments(target.database, table, authDump),
           { env: pgEnv },
         );
-      await runner.run(
-        'pg_restore',
-        [
-          '--no-owner',
-          '--no-privileges',
-          '--clean',
-          '--if-exists',
-          '--exit-on-error',
-          appDump,
-        ],
-        { env: pgEnv },
-      );
+      await runner.run('pg_restore', appRestoreArguments(target.database, appDump), {
+        env: pgEnv,
+      });
       await ensureCountsMatch(targetDb, manifest.authRowCounts);
       await ensureCountsMatch(targetDb, manifest.appTableCounts);
     } finally {

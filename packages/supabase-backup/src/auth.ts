@@ -130,6 +130,27 @@ export async function getApplicationTables(
   );
 }
 
+/**
+ * Requires application schemas with nothing in them before restoring into them.
+ *
+ * A restore adds objects and never drops them. `pg_restore --clean` cannot be
+ * used to make room, because its `DROP … IF EXISTS` statements still fail when
+ * the table an object belongs to is absent, which is exactly the state of a
+ * fresh recovery database. Refusing a populated schema keeps the restore from
+ * failing halfway and never drops anything the operator did not drop.
+ */
+export async function ensureApplicationSchemasEmpty(
+  db: Queryable,
+  schemas: string[],
+): Promise<void> {
+  const tables = await getApplicationTables(db, schemas);
+  if (!tables.length) return;
+  const listed = tables.slice(0, 5).join(', ');
+  throw new BackupError(
+    `Target schemas ${schemas.join(', ')} already contain ${tables.length} table(s), including ${listed}. Restore into a fresh recovery database, or drop and recreate the schemas first, for example 'DROP SCHEMA ${schemas[0] ?? 'public'} CASCADE; CREATE SCHEMA ${schemas[0] ?? 'public'};'.`,
+  );
+}
+
 /** Confirms restored table counts match the source manifest. */
 export async function ensureCountsMatch(
   db: Queryable,

@@ -165,7 +165,7 @@ export async function fillMissingInput(
         continue;
       }
       throw new BackupError(
-        `${field.flag} is required. Pass it, or run the command in a terminal to be asked for it.`,
+        `${field.flag} is required. Pass it, or run the command in an interactive terminal to be asked for it.`,
       );
     }
     filled[field.name] = await prompter.text(field.question, {

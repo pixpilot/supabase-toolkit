@@ -1,3 +1,4 @@
+export { ensureApplicationSchemasEmpty } from './auth.js';
 export { backup, backupWithConfig } from './backup.js';
 export {
   type CliArguments,
@@ -36,13 +37,14 @@ export {
 } from './postgres-tools.js';
 export {
   createPrompter,
+  interactiveStreams,
   isInteractive,
   type Prompter,
   type PromptStreams,
   type TextPromptOptions,
 } from './prompt.js';
 export { redact } from './redact.js';
-export { restore } from './restore.js';
+export { appRestoreArguments, authRestoreArguments, restore } from './restore.js';
 export { getBackupStatus, listManifestKeys, status } from './status.js';
 export {
   ensureNoTemplatePlaceholder,

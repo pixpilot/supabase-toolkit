@@ -8,6 +8,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureSupportedAuthState,
   getAuthColumns,
@@ -272,6 +273,21 @@ describe('auth preflight with PGlite', () => {
       ).resolves.toBeUndefined();
     } finally {
       await source.close();
+      await target.close();
+    }
+  });
+
+  it('refuses to restore into application schemas that already hold tables', async () => {
+    const target = await authDatabase();
+    try {
+      await expect(
+        ensureApplicationSchemasEmpty(target, ['public']),
+      ).resolves.toBeUndefined();
+      await target.exec('CREATE TABLE public.user_roles (id uuid, role text);');
+      await expect(ensureApplicationSchemasEmpty(target, ['public'])).rejects.toThrow(
+        'public.user_roles',
+      );
+    } finally {
       await target.close();
     }
   });

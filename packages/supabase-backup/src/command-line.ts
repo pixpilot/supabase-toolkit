@@ -16,7 +16,7 @@ import {
   statusFields,
   targetDatabaseUrlField,
 } from './interactive.js';
-import { createPrompter, isInteractive } from './prompt.js';
+import { createPrompter, interactiveStreams } from './prompt.js';
 import { R2Store } from './r2.js';
 import { restore } from './restore.js';
 import { status } from './status.js';
@@ -135,7 +135,7 @@ async function planRestore(
   if (key === undefined) {
     if (!prompter)
       throw new BackupError(
-        'restore requires --key <manifest-key> when the session is not a terminal.',
+        'restore needs --key <manifest-key> unless it can ask. Run it in an interactive terminal without --no-input to pick from the newest backups, or pass --key.',
       );
     values = await fillMissingInput([backupPrefixField], values, prompter);
     const config = loadStatusConfig(values);
@@ -195,7 +195,7 @@ export async function planCommand(
 /** Executes the package CLI commands. */
 export async function runCli(
   args = process.argv.slice(2),
-  streams: PromptStreams = { input: process.stdin, output: process.stderr },
+  streams: PromptStreams | undefined = interactiveStreams(),
 ): Promise<void> {
   const parsed = parseArguments(args);
   if (parsed.switches.has('--help') || parsed.switches.has('-h')) {
@@ -203,9 +203,7 @@ export async function runCli(
     return;
   }
   const prompter =
-    parsed.switches.has('--no-input') || !isInteractive(streams)
-      ? undefined
-      : createPrompter(streams);
+    parsed.switches.has('--no-input') || !streams ? undefined : createPrompter(streams);
   let run: () => Promise<unknown>;
   try {
     run = await planCommand(parsed, prompter);

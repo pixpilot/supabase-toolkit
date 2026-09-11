@@ -21,7 +21,8 @@ import {
   r2Fields,
   statusFields,
 } from '../src/interactive.js';
-import { createPrompter, isInteractive } from '../src/prompt.js';
+import { createPrompter, interactiveStreams, isInteractive } from '../src/prompt.js';
+import { appRestoreArguments, authRestoreArguments } from '../src/restore.js';
 
 /** The flags a fully specified run passes. */
 const connectionFlags: Record<string, string> = {
@@ -338,9 +339,7 @@ describe('planning a command', () => {
   it('requires --key when the session cannot be asked', async () => {
     await expect(
       planCommand(args('restore', connectionFlags), undefined),
-    ).rejects.toThrow(
-      'restore requires --key <manifest-key> when the session is not a terminal.',
-    );
+    ).rejects.toThrow('restore needs --key <manifest-key> unless it can ask.');
   });
 
   it('rejects a manifest key that could escape the backup namespace', async () => {
@@ -374,7 +373,50 @@ describe('planning a command', () => {
   });
 });
 
+describe('restoring into a database', () => {
+  it('names the target database, which pg_restore has no environment for', () => {
+    expect(authRestoreArguments('postgres', 'auth.users', '/tmp/auth.dump')).toEqual([
+      '--dbname',
+      'postgres',
+      '--data-only',
+      '--no-owner',
+      '--no-privileges',
+      '--exit-on-error',
+      '--table=auth.users',
+      '/tmp/auth.dump',
+    ]);
+    expect(appRestoreArguments('postgres', '/tmp/app.dump')).toEqual([
+      '--dbname',
+      'postgres',
+      '--no-owner',
+      '--no-privileges',
+      '--exit-on-error',
+      '/tmp/app.dump',
+    ]);
+  });
+
+  it('never cleans, because a clean cannot work on a fresh database', () => {
+    expect(appRestoreArguments('postgres', '/tmp/app.dump')).not.toContain('--clean');
+    expect(appRestoreArguments('postgres', '/tmp/app.dump')).not.toContain('--if-exists');
+  });
+});
+
 describe('terminal prompting', () => {
+  it('draws on stdout when only stderr is redirected', () => {
+    const terminal = terminalStreams();
+    const redirected = new PassThrough() as unknown as NodeJS.WriteStream;
+    expect(interactiveStreams(terminal.input, [redirected, terminal.output])).toEqual({
+      input: terminal.input,
+      output: terminal.output,
+    });
+    expect(interactiveStreams(terminal.input, [redirected])).toBeUndefined();
+    expect(
+      interactiveStreams(new PassThrough() as unknown as NodeJS.ReadStream, [
+        terminal.output,
+      ]),
+    ).toBeUndefined();
+  });
+
   it('is unavailable when either stream is not a terminal', () => {
     const streams = terminalStreams();
     expect(isInteractive(streams)).toBe(true);

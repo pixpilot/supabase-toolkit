@@ -181,6 +181,22 @@ export function isInteractive(streams: PromptStreams): boolean {
   return Boolean(streams.input.isTTY) && Boolean(streams.output.isTTY);
 }
 
+/**
+ * Picks the streams a prompt can use, or nothing when this session cannot ask.
+ *
+ * Answers can only come from a terminal on stdin. Questions go to stderr so
+ * command output stays machine readable, but a redirected stderr would hide
+ * them, so stdout is used instead when only it is a terminal.
+ */
+export function interactiveStreams(
+  input: NodeJS.ReadStream = process.stdin,
+  outputs: readonly NodeJS.WriteStream[] = [process.stderr, process.stdout],
+): PromptStreams | undefined {
+  if (!input.isTTY) return undefined;
+  const output = outputs.find((stream) => stream.isTTY);
+  return output ? { input, output } : undefined;
+}
+
 /** Creates a prompter; callers must close it before starting long work. */
 export function createPrompter(streams: PromptStreams): Prompter {
   if (!isInteractive(streams))
