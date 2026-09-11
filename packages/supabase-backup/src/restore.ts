@@ -24,6 +24,7 @@ import {
   writePrivateFile,
 } from './files.js';
 import { parseManifest } from './manifest.js';
+import { ensureRestoreToolSupportsArchive } from './postgres-tools.js';
 import { systemRunner } from './process.js';
 import { R2Store } from './r2.js';
 
@@ -49,6 +50,7 @@ export async function restore(
   const manifest = parseManifest(
     Buffer.from(await store.get(options.key)).toString('utf8'),
   );
+  await ensureRestoreToolSupportsArchive(runner, manifest.pgDumpVersion);
   const target = config.targetDatabaseUrl
     ? parseDatabaseUrl(config.targetDatabaseUrl)
     : undefined;
@@ -75,7 +77,11 @@ export async function restore(
       store.get(manifest.authChecksumObjectKey),
       writePrivateFile(appEncrypted, await store.get(manifest.appObjectKey)),
       writePrivateFile(authEncrypted, await store.get(manifest.authObjectKey)),
-      writePrivateFile(identity, config.ageIdentity),
+      writePrivateFile(
+        identity,
+        `${config.ageIdentity}
+`,
+      ),
     ]);
     const [actualAppSha, actualAuthSha] = await Promise.all([
       sha256File(appEncrypted),

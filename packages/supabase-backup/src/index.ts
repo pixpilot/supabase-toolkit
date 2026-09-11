@@ -8,6 +8,20 @@ export {
 } from './database-url.js';
 export { BackupError } from './errors.js';
 export { type BackupManifest, backupObjectKeys, parseManifest } from './manifest.js';
+export {
+  ensureDumpToolsCompatible,
+  ensureRestoreToolSupportsArchive,
+  parsePostgresMajor,
+} from './postgres-tools.js';
 export { redact } from './redact.js';
 export { restore } from './restore.js';
 export { getBackupStatus, status } from './status.js';
+export {
+  ensureNoTemplatePlaceholder,
+  ensureOpaqueSecret,
+  ensureValidAgeIdentity,
+  ensureValidAgeRecipient,
+  ensureValidBackupPrefix,
+  ensureValidR2Bucket,
+  ensureValidR2Endpoint,
+} from './validation.js';

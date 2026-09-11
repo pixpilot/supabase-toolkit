@@ -1,5 +1,7 @@
+import type { ProgramRunner } from '../src/process.js';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+
 import { join } from 'node:path';
 
 import { PGlite } from '@electric-sql/pglite';
@@ -10,7 +12,7 @@ import {
   ensureSupportedAuthState,
   getAuthColumns,
 } from '../src/auth.js';
-import { loadBackupConfig, loadStatusConfig } from '../src/config.js';
+import { loadBackupConfig, loadRestoreConfig, loadStatusConfig } from '../src/config.js';
 import {
   databaseLabel,
   ensureDifferentDatabases,
@@ -20,6 +22,11 @@ import {
 import { BackupError } from '../src/errors.js';
 import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from '../src/files.js';
 import { authTables, backupObjectKeys, parseManifest } from '../src/manifest.js';
+import {
+  ensureDumpToolsCompatible,
+  ensureRestoreToolSupportsArchive,
+  parsePostgresMajor,
+} from '../src/postgres-tools.js';
 import { systemRunner } from '../src/process.js';
 import { r2ErrorDetails } from '../src/r2.js';
 import { redact } from '../src/redact.js';
@@ -293,5 +300,193 @@ describe('auth preflight with PGlite', () => {
       await source.close();
       await target.close();
     }
+  });
+});
+
+describe('configuration validation', () => {
+  it('accepts the credential shapes real deployments use', () => {
+    const valid = [
+      { R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com' },
+      { R2_ENDPOINT: 'https://account.eu.r2.cloudflarestorage.com/' },
+      { R2_ENDPOINT: 'http://localhost:9000' },
+      { R2_BUCKET: 'abc' },
+      { R2_BUCKET: 'my.bucket-name.2024' },
+      { BACKUP_PREFIX: '/production/database/' },
+      { BACKUP_PREFIX: 'a' },
+      { BACKUP_AGE_RECIPIENT: 'age1yubikey1qwt50d05nh5vutpdzmlg5wn80xq5negm4uj9ghv0' },
+      { BACKUP_AGE_RECIPIENT: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI user@host' },
+      { R2_SECRET_ACCESS_KEY: 'b6f9c1de/4a+2==' },
+      {
+        SOURCE_DATABASE_URL:
+          'postgresql://postgres.ref:pa%40ss@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
+      },
+    ];
+    for (const override of valid)
+      expect(() => loadBackupConfig({ ...env, ...override })).not.toThrow();
+    expect(
+      loadBackupConfig({ ...env, BACKUP_PREFIX: '/production/database/' }),
+    ).toMatchObject({ prefix: 'production/database' });
+  });
+
+  it('rejects an endpoint that carries a bucket path, credentials, or plain http', () => {
+    const cases: [string, string][] = [
+      [
+        'https://account.r2.cloudflarestorage.com/private-backups',
+        'must not include a path',
+      ],
+      [
+        'https://key:secret@account.r2.cloudflarestorage.com',
+        'must not embed credentials',
+      ],
+      ['http://account.r2.cloudflarestorage.com', 'must use https'],
+      ['https://account.r2.cloudflarestorage.com?x=1', 'query string'],
+      ['account.r2.cloudflarestorage.com', 'absolute URL'],
+    ];
+    for (const [R2_ENDPOINT, message] of cases)
+      expect(() => loadStatusConfig({ ...env, R2_ENDPOINT })).toThrow(message);
+  });
+
+  it('rejects a bucket that is really a URL, a path, or an unusable name', () => {
+    const cases: [string, string][] = [
+      ['https://account.r2.cloudflarestorage.com/bucket', 'bucket name only'],
+      ['private-backups/production', 'bucket name only'],
+      ['Private-Backups', 'lowercase letters'],
+      ['-backups', 'lowercase letters'],
+      ['ab', 'between 3 and 63'],
+    ];
+    for (const [R2_BUCKET, message] of cases)
+      expect(() => loadStatusConfig({ ...env, R2_BUCKET })).toThrow(message);
+  });
+
+  it('rejects credentials that were pasted across lines or as a URL', () => {
+    expect(() =>
+      loadStatusConfig({ ...env, R2_SECRET_ACCESS_KEY: 'first half\nsecond half' }),
+    ).toThrow('R2_SECRET_ACCESS_KEY contains whitespace');
+    expect(() =>
+      loadStatusConfig({
+        ...env,
+        R2_ACCESS_KEY_ID: 'https://account.r2.cloudflarestorage.com',
+      }),
+    ).toThrow('R2_ACCESS_KEY_ID looks like a URL');
+  });
+
+  it('refuses an age private identity used where a recipient belongs', () => {
+    expect(() =>
+      loadBackupConfig({
+        ...env,
+        BACKUP_AGE_RECIPIENT: 'AGE-SECRET-KEY-1QWERTYUIOPASDFGHJKLZXCVBNM',
+      }),
+    ).toThrow('is an age identity (private key)');
+    expect(() => loadBackupConfig({ ...env, BACKUP_AGE_RECIPIENT: 'not-a-key' })).toThrow(
+      'must be an age recipient starting with age1',
+    );
+  });
+
+  it('refuses an age recipient used where a private identity belongs', () => {
+    expect(() => loadRestoreConfig({ ...env, AGE_IDENTITY: 'age1recipient' })).toThrow(
+      'is an age recipient (public key)',
+    );
+    expect(() => loadRestoreConfig({ ...env, AGE_IDENTITY: 'nonsense' })).toThrow(
+      'must be an age identity',
+    );
+    expect(() =>
+      loadRestoreConfig({
+        ...env,
+        AGE_IDENTITY: '-----BEGIN OPENSSH PRIVATE KEY-----\nx',
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects object-key prefixes that cannot address R2 objects', () => {
+    const cases: [string, string][] = [
+      ['production database', 'whitespace, backslashes, or control characters'],
+      ['production\\database', 'whitespace, backslashes, or control characters'],
+      ['https://bucket/production', 'not a URL'],
+      ['production//database', 'empty path segments'],
+      ['../production', 'non-empty object-key prefix'],
+    ];
+    for (const [BACKUP_PREFIX, message] of cases)
+      expect(() => loadStatusConfig({ ...env, BACKUP_PREFIX })).toThrow(message);
+  });
+
+  it('rejects connection strings whose template placeholders were never replaced', () => {
+    expect(() =>
+      parseDatabaseUrl(
+        'postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
+      ),
+    ).toThrow('still contains a placeholder');
+    expect(() => parseDatabaseUrl('postgresql://db.example.test:5432/postgres')).toThrow(
+      'must include the database user',
+    );
+    expect(() =>
+      parseDatabaseUrl('postgresql://backup:secret@[2001:DB8::1]:5432/postgres'),
+    ).not.toThrow();
+  });
+});
+
+describe('postgres client tooling', () => {
+  const banners: [string, number | undefined][] = [
+    ['pg_dump (PostgreSQL) 18.0 (Ubuntu 18.0-1.pgdg24.04+1)', 18],
+    ['pg_restore (PostgreSQL) 16.9', 16],
+    ['pg_dump (PostgreSQL) 19devel', 19],
+    ['not a version banner', undefined],
+    ['17.4', 17],
+    ['15.8 (Ubuntu 15.8-1.pgdg22.04+1)', 15],
+    ['18', 18],
+  ];
+
+  it('reads the major version out of a --version banner', () => {
+    for (const [banner, major] of banners) expect(parsePostgresMajor(banner)).toBe(major);
+  });
+
+  it('rejects a pg_restore older than pg_dump and allows the reverse', async () => {
+    const runnerFor = (dump: string, list: string): ProgramRunner => ({
+      async run(command) {
+        return command === 'pg_dump' ? dump : list;
+      },
+    });
+    await expect(
+      ensureDumpToolsCompatible(
+        runnerFor('pg_dump (PostgreSQL) 18.0', 'pg_restore (PostgreSQL) 16.9'),
+      ),
+    ).rejects.toThrow('pg_restore 16 cannot read archives written by pg_dump 18');
+    await expect(
+      ensureDumpToolsCompatible(
+        runnerFor('pg_dump (PostgreSQL) 16.9', 'pg_restore (PostgreSQL) 18.0'),
+      ),
+    ).resolves.toBe('pg_dump (PostgreSQL) 16.9');
+  });
+
+  it('refuses to dump a server newer than pg_dump', async () => {
+    const runner: ProgramRunner = {
+      async run(command) {
+        return command === 'pg_dump'
+          ? 'pg_dump (PostgreSQL) 16.9'
+          : 'pg_restore (PostgreSQL) 16.9';
+      },
+    };
+    await expect(ensureDumpToolsCompatible(runner, '17.4')).rejects.toThrow(
+      'pg_dump 16 cannot dump a PostgreSQL 17 server',
+    );
+    await expect(ensureDumpToolsCompatible(runner, '15.8')).resolves.toBe(
+      'pg_dump (PostgreSQL) 16.9',
+    );
+    await expect(ensureDumpToolsCompatible(runner)).resolves.toBe(
+      'pg_dump (PostgreSQL) 16.9',
+    );
+  });
+
+  it('refuses to restore an archive the local pg_restore cannot read', async () => {
+    const runner: ProgramRunner = {
+      async run() {
+        return 'pg_restore (PostgreSQL) 16.9';
+      },
+    };
+    await expect(
+      ensureRestoreToolSupportsArchive(runner, 'pg_dump (PostgreSQL) 18.0'),
+    ).rejects.toThrow('written by pg_dump 18 but the local pg_restore is 16');
+    await expect(
+      ensureRestoreToolSupportsArchive(runner, 'pg_dump (PostgreSQL) 15.4'),
+    ).resolves.toBeUndefined();
   });
 });

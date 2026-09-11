@@ -123,13 +123,16 @@ jobs:
       r2-endpoint: ${{ vars.R2_ENDPOINT }}
       r2-bucket: ${{ vars.R2_BUCKET }}
       max-age-hours: 36
-      postgres-client-version: '17'
-      package-version: '1'
     secrets:
       database-url: ${{ secrets.SOURCE_DATABASE_URL }}
       r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
       r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
+
+`postgres-client-version` and `package-version` are optional. `package-version` is
+the npm range the job runs (`npx @pixpilot/supabase-backup@<range>`) and defaults to
+the current major, `1`; pin an exact version if you want releases to reach this job
+only when you bump it.
 
 `postgres-client-version` selects the `postgresql-client-<major>` package installed
 from the PostgreSQL APT repository; it defaults to `17`. It must be greater than or

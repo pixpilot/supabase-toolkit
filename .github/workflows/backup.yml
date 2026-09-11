@@ -9,7 +9,7 @@ on:
       r2-bucket: {required: true, type: string}
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
-      package-version: {required: true, type: string}
+      package-version: {required: false, default: '1', type: string}
     secrets:
       database-url: {required: true}
       r2-access-key-id: {required: true}
@@ -37,7 +37,13 @@ jobs:
           echo "$repo" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install --yes "postgresql-client-$PG_MAJOR" age
+          echo "/usr/lib/postgresql/$PG_MAJOR/bin" >> "$GITHUB_PATH"
+      - name: Verify PostgreSQL client tools agree
+        run: |
+          set -euo pipefail
+          command -v pg_dump pg_restore
           pg_dump --version
+          pg_restore --version
       - name: Create encrypted backup
         env:
           SOURCE_DATABASE_URL: ${{ secrets.database-url }}

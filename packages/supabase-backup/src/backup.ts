@@ -17,6 +17,7 @@ import { parseDatabaseUrl, toLibpqEnvironment } from './database-url.js';
 import { BackupError } from './errors.js';
 import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from './files.js';
 import { authTables, backupObjectKeys } from './manifest.js';
+import { ensureDumpToolsCompatible } from './postgres-tools.js';
 import { systemRunner } from './process.js';
 import { R2Store } from './r2.js';
 
@@ -69,6 +70,7 @@ export async function backupWithConfig(
     const appEncrypted = `${appDump}.age`;
     const authEncrypted = `${authDump}.age`;
     const pgEnv = toLibpqEnvironment(connection);
+    const pgDumpVersion = await ensureDumpToolsCompatible(runner, serverVersion);
     await runner.run(
       'pg_dump',
       [
@@ -112,15 +114,12 @@ export async function backupWithConfig(
       authDump,
     ]);
     await unlink(authDump);
-    const [appSha256, authSha256, appBytes, authBytes, pgDumpVersion] = await Promise.all(
-      [
-        sha256File(appEncrypted),
-        sha256File(authEncrypted),
-        stat(appEncrypted).then((file) => file.size),
-        stat(authEncrypted).then((file) => file.size),
-        runner.run('pg_dump', ['--version']),
-      ],
-    );
+    const [appSha256, authSha256, appBytes, authBytes] = await Promise.all([
+      sha256File(appEncrypted),
+      sha256File(authEncrypted),
+      stat(appEncrypted).then((file) => file.size),
+      stat(authEncrypted).then((file) => file.size),
+    ]);
     const manifest: BackupManifest = {
       createdAt: createdAt.toISOString(),
       environment: config.prefix.split('/')[0] || 'default',

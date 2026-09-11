@@ -1,4 +1,5 @@
 import { BackupError } from './errors.js';
+import { ensureNoTemplatePlaceholder } from './validation.js';
 
 export interface DatabaseConnection {
   database: string;
@@ -11,6 +12,7 @@ export interface DatabaseConnection {
 
 /** Parses a PostgreSQL URL without retaining it in process arguments. */
 export function parseDatabaseUrl(value: string): DatabaseConnection {
+  ensureNoTemplatePlaceholder(value);
   let url: URL;
   try {
     url = new URL(value);
@@ -23,6 +25,11 @@ export function parseDatabaseUrl(value: string): DatabaseConnection {
     !url.pathname.slice(1)
   ) {
     throw new BackupError('Database URL must include protocol, host, and database name.');
+  }
+  if (!url.username) {
+    throw new BackupError(
+      'Database URL must include the database user, for example postgresql://postgres:<password>@host:5432/postgres.',
+    );
   }
   const port = url.port || '5432';
   if (port === '6543') {

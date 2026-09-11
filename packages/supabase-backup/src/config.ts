@@ -1,4 +1,12 @@
 import { BackupError } from './errors.js';
+import {
+  ensureOpaqueSecret,
+  ensureValidAgeIdentity,
+  ensureValidAgeRecipient,
+  ensureValidBackupPrefix,
+  ensureValidR2Bucket,
+  ensureValidR2Endpoint,
+} from './validation.js';
 
 export interface R2Config {
   accessKeyId: string;
@@ -31,12 +39,24 @@ function required(env: NodeJS.ProcessEnv, name: string): string {
 }
 
 function r2Config(env: NodeJS.ProcessEnv): R2Config {
-  return {
+  const config = {
     accessKeyId: required(env, 'R2_ACCESS_KEY_ID'),
     secretAccessKey: required(env, 'R2_SECRET_ACCESS_KEY'),
     endpoint: required(env, 'R2_ENDPOINT'),
     bucket: required(env, 'R2_BUCKET'),
   };
+  ensureOpaqueSecret('R2_ACCESS_KEY_ID', config.accessKeyId);
+  ensureOpaqueSecret('R2_SECRET_ACCESS_KEY', config.secretAccessKey);
+  ensureValidR2Endpoint(config.endpoint);
+  ensureValidR2Bucket(config.bucket);
+  return config;
+}
+
+/** Reads, normalises, and validates an object-key prefix. */
+function backupPrefix(env: NodeJS.ProcessEnv): string {
+  const prefix = required(env, 'BACKUP_PREFIX').replace(/^\/+|\/+$/gu, '');
+  ensureValidBackupPrefix(prefix);
+  return prefix;
 }
 
 /** Loads and validates backup-only environment configuration. */
@@ -54,14 +74,13 @@ export function loadBackupConfig(env = process.env): BackupConfig {
       'APP_SCHEMAS must contain valid application schemas and must not include auth.',
     );
   }
-  const prefix = required(env, 'BACKUP_PREFIX').replace(/^\/+|\/+$/gu, '');
-  if (!prefix || prefix.includes('..'))
-    throw new BackupError('BACKUP_PREFIX must be a non-empty object-key prefix.');
+  const ageRecipient = required(env, 'BACKUP_AGE_RECIPIENT');
+  ensureValidAgeRecipient(ageRecipient);
   return {
     ...r2Config(env),
-    ageRecipient: required(env, 'BACKUP_AGE_RECIPIENT'),
+    ageRecipient,
     sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL'),
-    prefix,
+    prefix: backupPrefix(env),
     appSchemas,
   };
 }
@@ -74,20 +93,19 @@ export function loadRestoreConfig(
   const targetDatabaseUrl = env['TARGET_DATABASE_URL']?.trim();
   if (requireTarget && !targetDatabaseUrl)
     throw new BackupError('TARGET_DATABASE_URL is required with --apply.');
+  const ageIdentity = required(env, 'AGE_IDENTITY');
+  ensureValidAgeIdentity(ageIdentity);
   return {
     ...r2Config(env),
-    ageIdentity: required(env, 'AGE_IDENTITY'),
+    ageIdentity,
     ...(targetDatabaseUrl ? { targetDatabaseUrl } : {}),
     ...(env['SOURCE_DATABASE_URL']?.trim()
-      ? { sourceDatabaseUrl: env['SOURCE_DATABASE_URL'].trim() }
+      ? { sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL') }
       : {}),
   };
 }
 
 /** Loads the R2 prefix and credentials required by the read-only health check. */
 export function loadStatusConfig(env = process.env): StatusConfig {
-  const prefix = required(env, 'BACKUP_PREFIX').replace(/^\/+|\/+$/gu, '');
-  if (!prefix || prefix.includes('..'))
-    throw new BackupError('BACKUP_PREFIX must be a non-empty object-key prefix.');
-  return { ...r2Config(env), prefix };
+  return { ...r2Config(env), prefix: backupPrefix(env) };
 }
