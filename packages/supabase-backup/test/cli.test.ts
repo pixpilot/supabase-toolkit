@@ -28,6 +28,7 @@ import {
   appRestoreArguments,
   authRestoreArguments,
   filterExistingSchemas,
+  restoreFollowUp,
 } from '../src/restore.js';
 
 /** The flags a fully specified run passes. */
@@ -510,6 +511,18 @@ describe('restoring into a database', () => {
     expect(() => authRestoreArguments('postgres', 'users', '/tmp/auth.dump')).toThrow(
       'must be schema-qualified',
     );
+  });
+
+  it('tells the operator what a restored database still needs', () => {
+    for (const subject of [
+      'Grants',
+      'supabase_auth_admin',
+      'Auth Hooks',
+      'Storage objects',
+      'edge functions',
+      'signs in again',
+    ])
+      expect(restoreFollowUp).toContain(subject);
   });
 
   it('never cleans, because a clean cannot work on a fresh database', () => {

@@ -49,7 +49,13 @@ export {
   type TextPromptOptions,
 } from './prompt.js';
 export { redact } from './redact.js';
-export { appRestoreArguments, authRestoreArguments, restore } from './restore.js';
+export {
+  appRestoreArguments,
+  authRestoreArguments,
+  filterExistingSchemas,
+  restore,
+  restoreFollowUp,
+} from './restore.js';
 export { getBackupStatus, listManifestKeys, status } from './status.js';
 export {
   ensureNoTemplatePlaceholder,

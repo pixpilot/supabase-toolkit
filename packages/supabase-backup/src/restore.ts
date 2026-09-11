@@ -139,6 +139,34 @@ export function appRestoreArguments(
   ];
 }
 
+/**
+ * What a restored database still needs before the project works again.
+ *
+ * A backup holds the application schemas and the Auth rows, so everything that
+ * lives outside them survives only by being set up again. This is printed where
+ * it is noticed: at the end of a restore, by whoever is in the middle of a
+ * recovery.
+ */
+export const restoreFollowUp = `
+The database is restored; the project is not. Set these up by hand:
+
+  Grants        No GRANT or ownership is carried by a backup, so restored
+                tables stay unreachable through the API. Re-run the migrations
+                that granted them, covering anon, authenticated, service_role,
+                and supabase_auth_admin.
+  Auth Hooks    A hook is project configuration, not a database object. Point it
+                back at its function under Authentication -> Hooks, or push it
+                from config.toml, and grant the function to supabase_auth_admin.
+  Auth settings Providers and their secrets, SMTP, email templates, redirect
+                URLs, and the JWT secret.
+  Elsewhere     Storage objects, edge functions and their secrets, cron jobs,
+                Vault secrets, and anything in a schema that was not backed up.
+
+Sessions are not part of a backup either, so every user signs in again. Verify
+that an existing user can, and that one representative workflow runs, before
+calling the recovery complete.
+`;
+
 /** Downloads, verifies, decrypts, and optionally restores a single manifest. */
 export async function restore(
   options: RestoreOptions,
@@ -258,7 +286,7 @@ export async function restore(
       await targetDb.end();
     }
     process.stdout.write(
-      `Restore database phase complete for ${databaseLabel(target)}. Manually verify an existing user can authenticate and run a representative application workflow before declaring recovery complete.\n`,
+      `Restore database phase complete for ${databaseLabel(target)}.\n${restoreFollowUp}`,
     );
     return manifest;
   });
