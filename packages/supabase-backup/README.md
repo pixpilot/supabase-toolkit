@@ -403,10 +403,13 @@ jobs:
 `app-schemas` defaults to `public`; list all application schemas that must be
 recovered. The workflow passes configuration as quoted CLI flags.
 
-`package-version` selects the published npm release. **Publish the recovery-safety
-release and set this input to that exact version before relying on these
-guarantees in Actions.** The checked-in default remains the already published
-`2.2.0` until the new release is available; it does not contain these fixes.
+`package-version` selects the published npm release and defaults to `'3'`, the
+major this workflow's flags belong to. A major range takes fixes and minors
+without letting a breaking release reach an unattended backup. Do not override it
+with an older major: `1.x` is configured through environment variables and rejects
+these flags, so `package-version: '1'` fails with `Unknown option
+'--source-database-url'`. Pass an exact version instead if you want every run to
+use a release you have reviewed, and accept that you must bump it to get fixes.
 Pin the reusable workflow to a reviewed commit as well.
 
 `postgres-client-version` selects the `postgresql-client-<major>` package installed

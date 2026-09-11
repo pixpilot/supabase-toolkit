@@ -10,8 +10,10 @@ on:
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
       app-schemas: {required: false, default: public, type: string}
-      # Update this exact pin after publishing the recovery-safety release.
-      package-version: {required: false, default: 2.2.0, type: string}
+      # Major range, so fixes arrive but a breaking release never does. The
+      # flags below are the 3.x interface: bump this default in the same commit
+      # that adopts a new major, never separately.
+      package-version: {required: false, default: '3', type: string}
     secrets:
       database-url: {required: true}
       r2-access-key-id: {required: true}
