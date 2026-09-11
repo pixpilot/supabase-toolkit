@@ -28,6 +28,7 @@ export const systemRunner: ProgramRunner = {
   async run(command, args, options = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
+        windowsHide: true,
         env: { ...process.env, ...options.env },
         stdio: ['ignore', 'pipe', 'pipe'],
       });

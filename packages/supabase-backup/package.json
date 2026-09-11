@@ -43,6 +43,7 @@
     "build": "tsdown",
     "build:watch": "tsdown --watch",
     "test": "vitest --run --passWithNoTests",
+    "test:integration": "vitest --run --config vitest.integration.config.ts",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui --watch",
     "test:ui:coverage": "vitest --ui --coverage --watch --hookTimeout=30000 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --coverage.thresholds.statements=0",

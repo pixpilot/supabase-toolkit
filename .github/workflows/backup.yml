@@ -9,11 +9,9 @@ on:
       r2-bucket: {required: true, type: string}
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
-      # Pinned to the published major that reads this configuration from the
-      # environment. Raise it to 2 together with the flag-based steps below, once
-      # the flags-only CLI is on npm; `latest` would break this job the moment
-      # that major publishes.
-      package-version: {required: false, default: '1', type: string}
+      app-schemas: {required: false, default: public, type: string}
+      # Update this exact pin after publishing the recovery-safety release.
+      package-version: {required: false, default: 2.2.0, type: string}
     secrets:
       database-url: {required: true}
       r2-access-key-id: {required: true}
@@ -45,13 +43,10 @@ jobs:
       - name: Verify PostgreSQL client tools agree
         run: |
           set -euo pipefail
-          command -v pg_dump pg_restore
+          command -v pg_dump pg_restore psql
           pg_dump --version
           pg_restore --version
-      # These two steps configure the CLI through the environment, which is what
-      # the published 1.x reads. The flags-only 2.x replaces each variable with a
-      # flag; switch both steps and the package-version default above in the same
-      # change that publishes it, never before, or a scheduled backup fails.
+          psql --version
       - name: Create encrypted backup
         env:
           SOURCE_DATABASE_URL: ${{ secrets.database-url }}
@@ -61,7 +56,16 @@ jobs:
           R2_ENDPOINT: ${{ inputs.r2-endpoint }}
           R2_BUCKET: ${{ inputs.r2-bucket }}
           BACKUP_PREFIX: ${{ inputs.backup-prefix }}
-        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} backup
+          APP_SCHEMAS: ${{ inputs.app-schemas }}
+          PACKAGE_VERSION: ${{ inputs.package-version }}
+        run: |
+          npx --yes "@pixpilot/supabase-backup@$PACKAGE_VERSION" backup --no-input \
+            --source-database-url "$SOURCE_DATABASE_URL" \
+            --age-recipient "$BACKUP_AGE_RECIPIENT" \
+            --r2-access-key-id "$R2_ACCESS_KEY_ID" \
+            --r2-secret-access-key "$R2_SECRET_ACCESS_KEY" \
+            --r2-endpoint "$R2_ENDPOINT" --r2-bucket "$R2_BUCKET" \
+            --prefix "$BACKUP_PREFIX" --schemas "$APP_SCHEMAS"
       - name: Verify backup health
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}
@@ -69,4 +73,11 @@ jobs:
           R2_ENDPOINT: ${{ inputs.r2-endpoint }}
           R2_BUCKET: ${{ inputs.r2-bucket }}
           BACKUP_PREFIX: ${{ inputs.backup-prefix }}
-        run: npx @pixpilot/supabase-backup@${{ inputs.package-version }} status --max-age-hours ${{ inputs.max-age-hours }}
+          PACKAGE_VERSION: ${{ inputs.package-version }}
+          MAX_AGE_HOURS: ${{ inputs.max-age-hours }}
+        run: |
+          npx --yes "@pixpilot/supabase-backup@$PACKAGE_VERSION" status --no-input \
+            --r2-access-key-id "$R2_ACCESS_KEY_ID" \
+            --r2-secret-access-key "$R2_SECRET_ACCESS_KEY" \
+            --r2-endpoint "$R2_ENDPOINT" --r2-bucket "$R2_BUCKET" \
+            --prefix "$BACKUP_PREFIX" --max-age-hours "$MAX_AGE_HOURS"

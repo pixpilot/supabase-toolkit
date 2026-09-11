@@ -195,7 +195,7 @@ export async function ensureApplicationSchemasEmpty(
   if (!tables.length) return;
   const listed = tables.slice(0, 5).join(', ');
   throw new BackupError(
-    `Target schemas ${schemas.join(', ')} already contain ${tables.length} table(s), including ${listed}. Restore into a fresh recovery database, or drop and recreate the schemas first, for example 'DROP SCHEMA ${schemas[0] ?? 'public'} CASCADE; CREATE SCHEMA ${schemas[0] ?? 'public'};'.`,
+    `Target schemas ${schemas.join(', ')} already contain ${tables.length} table(s), including ${listed}. Restore into a fresh recovery database.`,
   );
 }
 

@@ -55,7 +55,7 @@ export const usage = `Usage: supabase-backup <backup|status|restore> [options]
 
 Commands:
   backup     Dump, encrypt, and upload one immutable backup folder.
-  status     Verify the newest backup exists and is recent enough.
+  status     Verify the newest encrypted archives and their age.
   restore    Verify a backup, and write to a database only when asked.
 
 Connection options:

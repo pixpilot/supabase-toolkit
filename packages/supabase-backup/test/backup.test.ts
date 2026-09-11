@@ -1,4 +1,6 @@
+import type { BackupManifest } from '../src/manifest.js';
 import type { ProgramRunner } from '../src/process.js';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
@@ -67,16 +69,18 @@ class MemoryStore {
   }
 }
 
-function manifest() {
+function manifest(): BackupManifest {
   return {
+    formatVersion: 2,
+    appAccessFingerprint: 'a'.repeat(32),
     createdAt: '2026-01-01T00:00:00Z',
     environment: 'production',
     appObjectKey: 'app',
     appChecksumObjectKey: 'app.sha256',
     authObjectKey: 'auth',
     authChecksumObjectKey: 'auth.sha256',
-    appSha256: 'a'.repeat(64),
-    authSha256: 'b'.repeat(64),
+    appSha256: createHash('sha256').update('x').digest('hex'),
+    authSha256: createHash('sha256').update('x').digest('hex'),
     appEncryptedBytes: 1,
     authEncryptedBytes: 1,
     appSchemas: ['public'],
@@ -89,7 +93,7 @@ function manifest() {
       'auth.identities': [{ name: 'id', dataType: 'uuid' }],
     },
     appTableCounts: [],
-    authRowCounts: [],
+    authRowCounts: authTables.map((table) => ({ table, count: 0 })),
   };
 }
 
@@ -153,6 +157,31 @@ describe('configuration and safety', () => {
 });
 
 describe('backup records', () => {
+  it('rejects unsupported formats and malformed metadata before restoring', () => {
+    const valid = manifest();
+    const invalid: unknown[] = [
+      null,
+      [],
+      {},
+      { ...valid, formatVersion: 1 },
+      { ...valid, appSchemas: ['public; DROP SCHEMA auth'] },
+      { ...valid, appSchemas: ['public,private'] },
+      { ...valid, createdAt: 'not-a-date' },
+      { ...valid, authTables: [] },
+      { ...valid, authRowCounts: [] },
+      { ...valid, appEncryptedBytes: 0 },
+      { ...valid, authColumns: {} },
+      { ...valid, appAccessFingerprint: 'invalid' },
+      { ...valid, appSha256: [valid.appSha256] },
+      { ...valid, authTables: valid.authTables.map((table) => [table]) },
+      { ...valid, appTableCounts: [{ table: 'public.users', count: -1 }] },
+      { ...valid, appTableCounts: [{ table: 'other.users', count: 1 }] },
+    ];
+    expect(parseManifest(JSON.stringify(valid))).toEqual(valid);
+    for (const value of invalid)
+      expect(() => parseManifest(JSON.stringify(value))).toThrow(BackupError);
+  });
+
   it('uses immutable UTC object keys and rejects malformed manifests', () => {
     const keys = backupObjectKeys(
       'production/database',
@@ -190,19 +219,23 @@ describe('backup records', () => {
     store.values.set('production/database/v1/invalid/manifest.json', Buffer.from('{}'));
     await expect(
       getBackupStatus('production/database', store, new Date('2026-01-03T00:00:00Z')),
-    ).rejects.toThrow('No valid');
+    ).rejects.toThrow('incomplete');
+    store.values.delete('production/database/v1/invalid/manifest.json');
     const complete = manifest();
     store.values.set(
       'production/database/v1/20260101T000000Z/manifest.json',
       Buffer.from(JSON.stringify(complete)),
     );
-    for (const key of [
-      complete.appObjectKey,
-      complete.authObjectKey,
-      complete.appChecksumObjectKey,
-      complete.authChecksumObjectKey,
-    ])
+    for (const key of [complete.appObjectKey, complete.authObjectKey])
       store.values.set(key, Buffer.from('x'));
+    store.values.set(
+      complete.appChecksumObjectKey,
+      Buffer.from(`${complete.appSha256}  app\n`),
+    );
+    store.values.set(
+      complete.authChecksumObjectKey,
+      Buffer.from(`${complete.authSha256}  auth\n`),
+    );
     await expect(
       getBackupStatus('production/database', store, new Date('2026-01-03T00:00:00Z')),
     ).resolves.toMatchObject({ ageHours: 48 });

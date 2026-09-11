@@ -5,23 +5,15 @@ import type { ProgramRunner } from './process.js';
 import type { ObjectStore } from './r2.js';
 import { readFile, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  connectForPreflight,
-  ensureSupportedAuthState,
-  getApplicationTables,
-  getAuthColumns,
-  getTableCounts,
-} from './auth.js';
+import packageJson from '../package.json' with { type: 'json' };
 import { loadBackupConfig } from './config.js';
-import { parseDatabaseUrl, toLibpqEnvironment } from './database-url.js';
+import { dumpDatabase } from './dump-database.js';
 import { BackupError } from './errors.js';
 import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from './files.js';
 import { authTables, backupObjectKeys } from './manifest.js';
-import { ensureDumpToolsCompatible } from './postgres-tools.js';
 import { systemRunner } from './process.js';
 import { R2Store } from './r2.js';
-
-const packageVersion = '1.0.0';
+import { readVerifiedArchives } from './read-verified-archives.js';
 
 /** Creates encrypted, immutable app/Auth archives and publishes their manifest last. */
 export async function backup(
@@ -39,26 +31,6 @@ export async function backupWithConfig(
 ): Promise<BackupManifest> {
   const runner = dependencies.runner || systemRunner;
   const store = dependencies.store || new R2Store(config);
-  const connection = parseDatabaseUrl(config.sourceDatabaseUrl);
-  const preflight = await connectForPreflight(connection);
-  let serverVersion: string;
-  let authColumns: Awaited<ReturnType<typeof getAuthColumns>>;
-  let appTableCounts: Awaited<ReturnType<typeof getTableCounts>>;
-  let authRowCounts: Awaited<ReturnType<typeof getTableCounts>>;
-  try {
-    await ensureSupportedAuthState(preflight);
-    serverVersion =
-      (await preflight.query<{ version: string }>('SHOW server_version')).rows[0]
-        ?.version || 'unknown';
-    authColumns = await getAuthColumns(preflight);
-    appTableCounts = await getTableCounts(
-      preflight,
-      await getApplicationTables(preflight, config.appSchemas),
-    );
-    authRowCounts = await getTableCounts(preflight, [...authTables]);
-  } finally {
-    await preflight.end();
-  }
   const createdAt = dependencies.now || new Date();
   const keys = backupObjectKeys(config.prefix, createdAt);
   for (const key of Object.values(keys))
@@ -69,31 +41,7 @@ export async function backupWithConfig(
     const authDump = join(directory, 'auth.dump');
     const appEncrypted = `${appDump}.age`;
     const authEncrypted = `${authDump}.age`;
-    const pgEnv = toLibpqEnvironment(connection);
-    const pgDumpVersion = await ensureDumpToolsCompatible(runner, serverVersion);
-    await runner.run(
-      'pg_dump',
-      [
-        '--format=custom',
-        ...config.appSchemas.map((schema) => `--schema=${schema}`),
-        '--no-owner',
-        '--no-privileges',
-        `--file=${appDump}`,
-      ],
-      { env: pgEnv },
-    );
-    await runner.run(
-      'pg_dump',
-      [
-        '--format=custom',
-        '--data-only',
-        ...authTables.map((table) => `--table=${table}`),
-        '--no-owner',
-        '--no-privileges',
-        `--file=${authDump}`,
-      ],
-      { env: pgEnv },
-    );
+    const metadata = await dumpDatabase(config, runner, appDump, authDump);
     for (const archive of [appDump, authDump]) {
       await ensureNonEmptyFile(archive);
       await runner.run('pg_restore', ['--list', archive]);
@@ -121,6 +69,8 @@ export async function backupWithConfig(
       stat(authEncrypted).then((file) => file.size),
     ]);
     const manifest: BackupManifest = {
+      formatVersion: 2,
+      ...metadata,
       createdAt: createdAt.toISOString(),
       environment: config.prefix.split('/')[0] || 'default',
       appObjectKey: keys.app,
@@ -133,12 +83,7 @@ export async function backupWithConfig(
       authEncryptedBytes: authBytes,
       appSchemas: config.appSchemas,
       authTables: [...authTables],
-      pgDumpVersion,
-      postgresServerVersion: serverVersion,
-      cliVersion: packageVersion,
-      authColumns,
-      appTableCounts,
-      authRowCounts,
+      cliVersion: packageJson.version,
     };
     await store.putImmutable(keys.app, await readFile(appEncrypted));
     await store.putImmutable(keys.auth, await readFile(authEncrypted));
@@ -150,6 +95,7 @@ export async function backupWithConfig(
       keys.authChecksum,
       Buffer.from(`${authSha256}  ${keys.auth.split('/').at(-1)}\n`),
     );
+    await readVerifiedArchives(manifest, store);
     await store.putImmutable(keys.manifest, Buffer.from(`${JSON.stringify(manifest)}\n`));
     for (const key of Object.values(keys))
       if (!(await store.has(key)))

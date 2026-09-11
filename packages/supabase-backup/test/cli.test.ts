@@ -261,8 +261,8 @@ describe('choosing a backup to restore', () => {
   });
 
   it('falls back to the key when a folder is not a backup stamp', () => {
-    expect(describeBackupKey('production/database/legacy/manifest.json')).toBe(
-      'production/database/legacy',
+    expect(describeBackupKey('production/database/custom/manifest.json')).toBe(
+      'production/database/custom',
     );
   });
 
@@ -445,23 +445,24 @@ describe('planning a command', () => {
 });
 
 describe('restoring into a database', () => {
-  it('names the target database, which pg_restore has no environment for', () => {
-    expect(authRestoreArguments('postgres', 'auth.users', '/tmp/auth.dump')).toEqual([
-      '--dbname',
-      'postgres',
+  it('renders SQL files for one transaction with ownership and privileges intact', () => {
+    expect(
+      authRestoreArguments('/tmp/users.sql', 'auth.users', '/tmp/auth.dump'),
+    ).toEqual([
+      '--file',
+      '/tmp/users.sql',
       '--data-only',
       '--no-owner',
       '--no-privileges',
       '--exit-on-error',
+      '--strict-names',
       '--schema=auth',
       '--table=users',
       '/tmp/auth.dump',
     ]);
-    expect(appRestoreArguments('postgres', '/tmp/app.dump')).toEqual([
-      '--dbname',
-      'postgres',
-      '--no-owner',
-      '--no-privileges',
+    expect(appRestoreArguments('/tmp/app.sql', '/tmp/app.dump')).toEqual([
+      '--file',
+      '/tmp/app.sql',
       '--exit-on-error',
       '/tmp/app.dump',
     ]);
@@ -515,7 +516,7 @@ describe('restoring into a database', () => {
 
   it('tells the operator what a restored database still needs', () => {
     for (const subject of [
-      'Grants',
+      'Access',
       'supabase_auth_admin',
       'Auth Hooks',
       'Storage objects',

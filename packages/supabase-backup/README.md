@@ -1,10 +1,11 @@
 # @pixpilot/supabase-backup
 
-Encrypted backups of application schemas plus `auth.users` and `auth.identities`.
+Encrypted backups of application schemas plus `auth.users`, `auth.identities`,
+and their trigger definitions, captured from one consistent database snapshot.
 It is deliberately not full Supabase-project disaster recovery: read
 [what a restore does not carry](#what-a-restore-does-not-carry) before relying on
 it. Requires Node
-22+, `pg_dump`, `pg_restore`, and `age`; direct PostgreSQL or the Supabase
+22+, `pg_dump`, `pg_restore`, `psql`, and `age`; direct PostgreSQL or the Supabase
 Session Pooler on port 5432 is supported, while Transaction Pooler port 6543 is rejected.
 
 ## Create an R2 bucket
@@ -90,6 +91,13 @@ myapp-production-backups
 names sort chronologically, so `status` finds the newest backup by listing
 `<prefix>/v1/`.
 
+Manifests require `formatVersion: 2`. Counts, application access rules, and both
+archives use the same exported PostgreSQL snapshot. Application ownership,
+GRANT/REVOKE rules, and RLS policies are preserved. Auth table definitions are
+stored so their triggers can be recovered; restore never replaces the managed
+Auth tables. Uploaded archives are downloaded and verified before the manifest
+is published.
+
 `--prefix` defaults to `production/database`. `--schemas` is comma-separated and
 defaults to `public`; `auth` is never an application schema. Backups fail if non-empty `auth.mfa_factors`,
 `auth.sso_providers`, or `auth.saml_providers` would be omitted. R2 must be a
@@ -125,9 +133,15 @@ for lifecycle-rule limits and API/Wrangler configuration.
 
 ## Restore drill
 
-Keep the age identity outside GitHub Actions and R2 credentials. Restore verifies
-hashes, decrypts in a private temporary directory, inspects both archives, and
-does nothing unless `--apply` is present. Apply only to a fresh recovery project.
+Keep the age identity outside GitHub Actions and R2 credentials. Use a fresh
+recovery project with matching Supabase Auth schema, required extensions, and
+application roles. Application schemas must contain no objects, and the two
+Auth tables must be empty with no custom triggers. Keep application traffic
+away from the recovery project until verification is complete.
+
+Restore verifies hashes, decrypts in a private temporary directory, and renders
+SQL before writing to the target. Noninteractive restore needs `--apply`;
+interactive restore asks for an explicit target confirmation.
 
 ```bash
 npx @pixpilot/supabase-backup@latest restore \
@@ -145,51 +159,38 @@ npx @pixpilot/supabase-backup@latest restore \
 Running `restore` with no flags walks you through the same steps, including a
 list of the newest backups to choose from.
 
-Apply restores Auth data before application data and only ever adds objects: it
-requires the target Auth tables and the application schemas to be empty, and
-rejects a target matching `--source-database-url`. If the target already holds
-those tables, restore into a fresh recovery database, or drop and recreate the
-schema first — `pg_restore --clean` cannot make room for you, because its
-`DROP … IF EXISTS` statements still fail when the table an object belongs to is
-missing. Verify user login and a representative application workflow manually
-afterward.
+Apply locks and rechecks the empty Auth tables, restores Auth rows, application
+objects, and Auth triggers, then validates counts and application ownership and
+privileges before committing. These steps run in one `psql --single-transaction`
+session with `ON_ERROR_STOP`: any SQL or validation failure rolls back the
+restore. It never drops existing objects. If target default privileges would
+change access, restore fails rather than committing those differences.
+
+Verify existing-user login, new-user signup/profile creation, and an application
+workflow afterward. Check access as `anon` and `authenticated`, including
+functions and tables that must remain private.
 
 ## What a restore does not carry
 
-A backup holds the application schemas plus the rows of `auth.users` and
-`auth.identities`, and nothing else. Everything below survives only because you
+A backup holds the application schemas plus the rows and trigger definitions
+of `auth.users` and `auth.identities`. Everything below survives only because you
 recreate it, so a recovery project is not usable until you have worked through
 this list. Plan the drill with that in mind, and keep the sources of these values
 somewhere the loss of the project cannot take with it.
 
-**Privileges and roles.** Both the dump and the restore run with
-`--no-privileges` and `--no-owner`, so no `GRANT`, `REVOKE`, or ownership is
-captured or applied, and roles such as `anon`, `authenticated`, `service_role`,
-and `supabase_auth_admin` belong to the project rather than the dump. Restored
-tables are therefore unreachable through PostgREST until their grants are back.
-Re-run the migrations that granted them, or apply the grants by hand:
-
-```sql
-grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
-grant all on all sequences in schema public to anon, authenticated, service_role;
-```
-
-Row-level security policies themselves are part of the dump and come back with
-their tables, so a table with RLS enabled stays closed until you grant it.
+**Role definitions.** Application privileges and ownership are restored, but
+roles themselves are not created. Supabase supplies its managed roles; create
+any custom roles and required memberships on the target first. Missing roles or
+incompatible access rules cause the restore transaction to roll back. RLS
+policies and enabled/disabled RLS state are restored with their tables.
 
 **Auth configuration and the rest of Auth.** Providers and their secrets, SMTP,
 email templates, redirect URLs, rate limits, the JWT secret, and Auth Hooks are
-project settings held outside PostgreSQL. A hook, for example, has to be pointed
-at its function again under **Authentication → Hooks**, and the function needs
-its own grants:
-
-```sql
-grant usage on schema public to supabase_auth_admin;
-grant execute on function public.custom_access_token_hook(jsonb) to supabase_auth_admin;
-revoke execute on function public.custom_access_token_hook(jsonb) from authenticated, anon, public;
-grant all on table public.user_roles to supabase_auth_admin;
-```
+project settings held outside PostgreSQL. Point a hook at its restored function
+again under **Supabase dashboard → Authentication → Hooks**. Database triggers
+attached to the two backed-up Auth tables are restored automatically after
+application data; their custom functions must be in a backed-up application
+schema. Other Auth table changes are managed by Supabase and are not applied.
 
 Only `auth.users` and `auth.identities` are backed up, so sessions and refresh
 tokens are gone and every user signs in again. MFA factors and SSO/SAML
@@ -398,19 +399,33 @@ jobs:
       r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
 
-`postgres-client-version` and `package-version` are optional. `package-version` is
-the npm range the job runs (`npx @pixpilot/supabase-backup@<range>`) and defaults to
-the major the workflow is written against, so a breaking release cannot reach a
-scheduled backup on its own. Pass `latest` if you would rather follow every
-release, and expect to update the workflow when a major lands.
+`postgres-client-version`, `package-version`, and `app-schemas` are optional.
+`app-schemas` defaults to `public`; list all application schemas that must be
+recovered. The workflow passes configuration as quoted CLI flags.
+
+`package-version` selects the published npm release. **Publish the recovery-safety
+release and set this input to that exact version before relying on these
+guarantees in Actions.** The checked-in default remains the already published
+`2.2.0` until the new release is available; it does not contain these fixes.
+Pin the reusable workflow to a reviewed commit as well.
 
 `postgres-client-version` selects the `postgresql-client-<major>` package installed
 from the PostgreSQL APT repository; it defaults to `17`. It must be greater than or
 equal to your Supabase server's major version, otherwise `pg_dump` aborts with a
 server version mismatch. Check yours with `select version()` in the SQL editor.
 
-Publish matching npm and `v1` workflow releases; run a recovery drill immediately,
+Publish matching npm and workflow releases; run a recovery drill immediately,
 quarterly, and after material Auth changes.
+
+## Development checks
+
+Run `pnpm --filter @pixpilot/supabase-backup typecheck` and
+`pnpm --filter @pixpilot/supabase-backup test` from the repository root.
+`pnpm --filter @pixpilot/supabase-backup test:integration` additionally needs
+Docker and PostgreSQL client tools on PATH. It creates and removes a disposable
+local PostgreSQL container with synthetic data. The integration suite uses real
+dump/restore tools; encryption and R2 are substituted, so a real encrypted R2
+restore drill is still required before production adoption.
 
 ## Verify
 
@@ -424,7 +439,7 @@ bucket**.
    npx @pixpilot/supabase-backup@latest status --max-age-hours 36
    ```
 
-2. Confirm it prints a completed manifest key.
+2. Confirm it reports verified encrypted archive integrity and a completed manifest key.
 3. Open the R2 bucket and confirm one `<prefix>/v1/<timestamp>/` folder holds
    `manifest.json` plus the encrypted app and Auth archives and their checksums.
 4. Open **Settings → Object Lifecycle Rules** and confirm the enabled rule matches
@@ -434,8 +449,8 @@ bucket**.
 
 - Do not use `secrets: inherit`; pass only the three required secrets explicitly.
 - Lifecycle deletion is asynchronous and typically occurs within 24 hours after expiry.
-- Backups written before `v1` used a `<prefix>/YYYY/MM/DD/<timestamp>.*` layout.
-  `status` no longer sees them; `restore --key` still reads them, because a manifest
-  carries the full object keys of its own archives. A lifecycle rule scoped to
-  `<prefix>/` expires them alongside everything else; one scoped to `<prefix>/v1/`
-  leaves them until you add a second rule.
+- `status` downloads both encrypted archives to check their lengths and SHA-256 hashes; it does not prove a database restore will succeed.
+- New backups also download their uploaded archives for verification before publishing the manifest.
+- Keep `pg_dump`, `pg_restore`, and `psql` from the same PostgreSQL client installation.
+- Required custom roles, extensions, and target default privileges must be compatible before recovery.
+- A restore failure rolls back database changes; it does not undo external effects from untrusted SQL functions. Restore only trusted backups into an isolated recovery project.

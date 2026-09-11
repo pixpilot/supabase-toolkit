@@ -8,7 +8,6 @@ import {
   ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
-  ensureCountsMatch,
   getExistingSchemas,
 } from './auth.js';
 import { loadRestoreConfig } from './config.js';
@@ -20,16 +19,17 @@ import {
   toLibpqEnvironment,
 } from './database-url.js';
 import { BackupError } from './errors.js';
-import {
-  ensureNonEmptyFile,
-  sha256File,
-  withTemporaryDirectory,
-  writePrivateFile,
-} from './files.js';
+import { ensureNonEmptyFile, withTemporaryDirectory, writePrivateFile } from './files.js';
 import { parseManifest } from './manifest.js';
 import { ensureRestoreToolSupportsArchive } from './postgres-tools.js';
 import { systemRunner } from './process.js';
 import { R2Store } from './r2.js';
+import { readVerifiedArchives } from './read-verified-archives.js';
+import {
+  authTriggerList,
+  restorePreflightSql,
+  restoreValidationSql,
+} from './restore-sql.js';
 import { ensureValidManifestKey } from './validation.js';
 
 export interface RestoreOptions {
@@ -38,33 +38,27 @@ export interface RestoreOptions {
   key: string;
 }
 
-/**
- * Selects one Auth table, the only way `pg_restore` accepts one.
- *
- * `--table` takes a bare table name and ignores any schema in it, so
- * `--table=auth.users` silently matches nothing and the run still succeeds
- * having restored no rows. The schema has to travel in `--schema` instead.
- *
- * `--dbname` is equally unavoidable: the rest of the connection arrives through
- * the libpq environment, which keeps the password out of the process arguments,
- * but PostgreSQL 16 and later refuse to run without `-d` or `-f`, and earlier
- * versions would print SQL to stdout instead of restoring.
- */
+/** Renders one Auth table's data to SQL for the shared restore transaction. */
 export function authRestoreArguments(
-  database: string,
+  outputFile: string,
   table: string,
   archive: string,
 ): string[] {
-  const [schema, name] = table.split('.');
-  if (!schema || !name || name.includes('.'))
+  const [schema, name, extra] = table.split('.');
+  if (
+    schema !== 'auth' ||
+    !['users', 'identities'].includes(name ?? '') ||
+    extra !== undefined
+  )
     throw new BackupError(`Auth table '${table}' must be schema-qualified.`);
   return [
-    '--dbname',
-    database,
+    '--file',
+    outputFile,
     '--data-only',
     '--no-owner',
     '--no-privileges',
     '--exit-on-error',
+    '--strict-names',
     `--schema=${schema}`,
     `--table=${name}`,
     archive,
@@ -114,25 +108,15 @@ async function appTableOfContents(
   return listPath;
 }
 
-/**
- * Arguments that load the application schemas into an empty target.
- *
- * There is deliberately no `--clean`: its `DROP … IF EXISTS` statements guard
- * only the object, not the table it belongs to, so cleaning a database that does
- * not already hold the whole schema aborts the restore. The preflight requires
- * empty application schemas instead, which also means a restore never drops
- * anything.
- */
+/** Renders application SQL with its original ownership and access rules. */
 export function appRestoreArguments(
-  database: string,
+  outputFile: string,
   archive: string,
   tocList?: string,
 ): string[] {
   return [
-    '--dbname',
-    database,
-    '--no-owner',
-    '--no-privileges',
+    '--file',
+    outputFile,
     '--exit-on-error',
     ...(tocList ? ['--use-list', tocList] : []),
     archive,
@@ -150,13 +134,12 @@ export function appRestoreArguments(
 export const restoreFollowUp = `
 The database is restored; the project is not. Set these up by hand:
 
-  Grants        No GRANT or ownership is carried by a backup, so restored
-                tables stay unreachable through the API. Re-run the migrations
-                that granted them, covering anon, authenticated, service_role,
-                and supabase_auth_admin.
+  Access        Application ownership, GRANT/REVOKE rules, and Auth table
+                triggers are restored. Verify access as anon, authenticated,
+                service_role, and supabase_auth_admin before serving traffic.
   Auth Hooks    A hook is project configuration, not a database object. Point it
                 back at its function under Authentication -> Hooks, or push it
-                from config.toml, and grant the function to supabase_auth_admin.
+                from config.toml.
   Auth settings Providers and their secrets, SMTP, email templates, redirect
                 URLs, and the JWT secret.
   Elsewhere     Storage objects, edge functions and their secrets, cron jobs,
@@ -202,28 +185,12 @@ export async function restore(
     const appDump = join(directory, 'app.dump');
     const authDump = join(directory, 'auth.dump');
     const identity = join(directory, 'identity.txt');
-    const [appChecksum, authChecksum] = await Promise.all([
-      store.get(manifest.appChecksumObjectKey),
-      store.get(manifest.authChecksumObjectKey),
-      writePrivateFile(appEncrypted, await store.get(manifest.appObjectKey)),
-      writePrivateFile(authEncrypted, await store.get(manifest.authObjectKey)),
-      writePrivateFile(
-        identity,
-        `${config.ageIdentity}
-`,
-      ),
+    const archives = await readVerifiedArchives(manifest, store);
+    await Promise.all([
+      writePrivateFile(appEncrypted, archives.app),
+      writePrivateFile(authEncrypted, archives.auth),
+      writePrivateFile(identity, `${config.ageIdentity}\n`),
     ]);
-    const [actualAppSha, actualAuthSha] = await Promise.all([
-      sha256File(appEncrypted),
-      sha256File(authEncrypted),
-    ]);
-    if (
-      actualAppSha !== manifest.appSha256 ||
-      actualAuthSha !== manifest.authSha256 ||
-      !Buffer.from(appChecksum).toString('utf8').startsWith(manifest.appSha256) ||
-      !Buffer.from(authChecksum).toString('utf8').startsWith(manifest.authSha256)
-    )
-      throw new BackupError('Encrypted archive checksum verification failed.');
     await runner.run('age', [
       '--decrypt',
       '--identity',
@@ -255,33 +222,67 @@ export async function restore(
       await ensureAuthCompatible(targetDb, manifest.authColumns);
       if (!options.apply) {
         process.stdout.write(
-          `Restore plan (no changes): target ${databaseLabel(target)}; Auth tables ${manifest.authTables.join(', ')} then application schemas ${manifest.appSchemas.join(', ')}. The target accepts this backup; pass --apply to write it, which needs those schemas and the target Auth tables empty.\n`,
+          `Restore plan (no changes): target ${databaseLabel(target)}; Auth columns are compatible. Apply requires empty application schemas and Auth tables, matching roles/extensions, and no existing custom Auth triggers.\n`,
         );
         return manifest;
       }
       await ensureAuthTablesEmpty(targetDb);
       await ensureApplicationSchemasEmpty(targetDb, manifest.appSchemas);
-      const pgEnv = toLibpqEnvironment(target);
-      for (const table of manifest.authTables)
-        await runner.run(
-          'pg_restore',
-          authRestoreArguments(target.database, table, authDump),
-          { env: pgEnv },
-        );
-      /* Before the application data, whose foreign keys reference these rows. */
-      await ensureCountsMatch(targetDb, manifest.authRowCounts);
       const appList = await appTableOfContents(
         runner,
         appDump,
         join(directory, 'app.list'),
         await getExistingSchemas(targetDb, manifest.appSchemas),
       );
-      await runner.run(
-        'pg_restore',
-        appRestoreArguments(target.database, appDump, appList),
-        { env: pgEnv },
+      const preflightSql = join(directory, 'preflight.sql');
+      const validationSql = join(directory, 'validation.sql');
+      const appSql = join(directory, 'app.sql');
+      const authSql: string[] = [];
+      for (const table of manifest.authTables) {
+        const file = join(directory, `${table}.sql`);
+        await runner.run('pg_restore', authRestoreArguments(file, table, authDump));
+        authSql.push(file);
+      }
+      await runner.run('pg_restore', appRestoreArguments(appSql, appDump, appList));
+      const triggers = authTriggerList(
+        await runner.run('pg_restore', ['--list', authDump]),
       );
-      await ensureCountsMatch(targetDb, manifest.appTableCounts);
+      const triggerFiles: string[] = [];
+      if (triggers) {
+        const listFile = join(directory, 'auth-triggers.list');
+        const sqlFile = join(directory, 'auth-triggers.sql');
+        await writePrivateFile(listFile, `${triggers}\n`);
+        await runner.run('pg_restore', [
+          '--file',
+          sqlFile,
+          '--no-owner',
+          '--no-privileges',
+          '--use-list',
+          listFile,
+          authDump,
+        ]);
+        triggerFiles.push(sqlFile);
+      }
+      await writePrivateFile(preflightSql, restorePreflightSql(manifest.appSchemas));
+      await writePrivateFile(validationSql, restoreValidationSql(manifest));
+      // psql owns the one connection/transaction, including checks before COMMIT.
+      await runner.run(
+        'psql',
+        [
+          '--no-psqlrc',
+          '--no-password',
+          '--single-transaction',
+          '--quiet',
+          '--set=ON_ERROR_STOP=on',
+          '--set=ON_ERROR_ROLLBACK=off',
+          '--dbname',
+          target.database,
+          ...[preflightSql, ...authSql, appSql, ...triggerFiles, validationSql].flatMap(
+            (file) => ['--file', file],
+          ),
+        ],
+        { env: toLibpqEnvironment(target) },
+      );
     } finally {
       await targetDb.end();
     }
