@@ -144,18 +144,28 @@ stdin and stderr are a terminal. Only what is missing is asked, so
 `restore --key <manifest-key>` never asks about the key again:
 
 ```bash
-npx @pixpilot/supabase-backup@2 restore
-# Backup object-key prefix [production/database]:
+npx @pixpilot/supabase-backup@2 restore \
+  --r2-endpoint 'https://<account-id>.r2.cloudflarestorage.com' \
+  --r2-bucket 'roleclick-backups' \
+  --r2-access-key-id … \
+  --r2-secret-access-key … \
+  --age-identity 'AGE-SECRET-KEY-…' \
+  --prefix production/database
 # Select a backup to restore (newest first):
-#   1) production/database/v1/20260911T031700Z
-#   2) production/database/v1/20260910T031700Z
-#   3) Enter another manifest key
-# Select 1-3: 1
-# age identity used to decrypt (AGE-SECRET-KEY-1…):
+#   1) 2026-09-11 13:10 UTC  (20 minutes old)  20260911T131038Z
+#   2) 2026-09-10 03:17 UTC  (34 hours old)  20260910T031700Z
+#   3) 2026-09-09 03:17 UTC  (2 days old)  20260909T031700Z
+#   4) Enter another manifest key
+# Select 1-4: 1
 # Apply this backup to the target database? It writes data. [y/N]: y
 # Target database URL to restore into:
 # Type 'db.example.test:5432/postgres' to confirm the restore target:
 ```
+
+Backups are listed newest first, ten at a time, from `--prefix`. Leave `--prefix`
+out as well and it is asked for, with `production/database` offered as the
+default. Answering `n` to the apply question keeps the run a dry run: it still
+downloads, verifies the checksums, decrypts, and inspects both archives.
 
 - The prefix prompt offers `production/database` as its default and `--schemas`
   offers `public`, so pressing Enter accepts them. A default is only ever shown

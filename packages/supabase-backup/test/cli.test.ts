@@ -16,6 +16,7 @@ import {
   chooseManifestKey,
   confirmRestoreTarget,
   defaultBackupPrefix,
+  describeBackupKey,
   fillMissingInput,
   r2Fields,
   statusFields,
@@ -70,8 +71,10 @@ class StubPrompter implements Prompter {
     return this.confirmations.shift() ?? defaultValue;
   }
 
+  public offered: readonly string[] = [];
   public async select(question: string, choices: readonly string[]): Promise<number> {
     this.asked.push(question);
+    this.offered = choices;
     const selected = this.selections.shift() ?? 0;
     if (selected >= choices.length) throw new BackupError('Selection out of range.');
     return selected;
@@ -231,10 +234,22 @@ describe('choosing a backup to restore', () => {
     Buffer.from(''),
   );
 
-  it('offers the newest backup first', async () => {
+  it('offers the newest backup first, dated and aged', async () => {
     const prompter = new StubPrompter([], [], [0]);
-    await expect(chooseManifestKey('production/database', store, prompter)).resolves.toBe(
-      newer,
+    const now = new Date('2026-01-03T00:00:00Z');
+    await expect(
+      chooseManifestKey('production/database', store, prompter, now),
+    ).resolves.toBe(newer);
+    expect(prompter.offered).toEqual([
+      '2026-01-02 00:00 UTC  (24 hours old)  20260102T000000Z',
+      '2026-01-01 00:00 UTC  (2 days old)  20260101T000000Z',
+      'Enter another manifest key',
+    ]);
+  });
+
+  it('falls back to the key when a folder is not a backup stamp', () => {
+    expect(describeBackupKey('production/database/legacy/manifest.json')).toBe(
+      'production/database/legacy',
     );
   });
 

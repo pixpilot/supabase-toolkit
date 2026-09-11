@@ -177,11 +177,40 @@ export async function fillMissingInput(
   return filled;
 }
 
+/** Matches the compact UTC folder name one backup is written under. */
+const backupStamp = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/u;
+
+/** States an age in the largest unit that still reads precisely. */
+function ageLabel(milliseconds: number): string {
+  const minutes = Math.floor(milliseconds / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} old`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} old`;
+  return `${Math.floor(hours / 24)} days old`;
+}
+
+/** Describes one manifest key as a line an operator can compare at a glance. */
+export function describeBackupKey(key: string, now = new Date()): string {
+  const folder = key.endsWith(`/${manifestObjectName}`)
+    ? key.slice(0, -(manifestObjectName.length + 1))
+    : key;
+  const stamp = folder.split('/').at(-1) ?? folder;
+  const parts = backupStamp.exec(stamp);
+  if (!parts) return folder;
+  const [, year, month, day, hour, minute, second] = parts;
+  const created = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
+  const age = now.getTime() - created.getTime();
+  if (!Number.isFinite(age) || age < 0) return stamp;
+  return `${year}-${month}-${day} ${hour}:${minute} UTC  (${ageLabel(age)})  ${stamp}`;
+}
+
 /** Lists the newest backups and returns the manifest key the operator picked. */
 export async function chooseManifestKey(
   prefix: string,
   store: ObjectStore,
   prompter: Prompter,
+  now = new Date(),
 ): Promise<string> {
   const keys = await listManifestKeys(prefix, store);
   if (!keys.length) {
@@ -190,9 +219,8 @@ export async function chooseManifestKey(
     );
   }
   const listed = keys.slice(0, maximumListedBackups);
-  const suffix = `/${manifestObjectName}`;
   const choice = await prompter.select('Select a backup to restore (newest first):', [
-    ...listed.map((key) => key.slice(0, -suffix.length)),
+    ...listed.map((key) => describeBackupKey(key, now)),
     'Enter another manifest key',
   ]);
   const selected = listed[choice];

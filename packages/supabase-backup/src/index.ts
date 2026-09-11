@@ -21,6 +21,7 @@ export {
   chooseManifestKey,
   confirmRestoreTarget,
   defaultBackupPrefix,
+  describeBackupKey,
   fillMissingInput,
   type InputField,
   type InputValues,
