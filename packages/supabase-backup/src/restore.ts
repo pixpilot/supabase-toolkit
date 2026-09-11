@@ -266,23 +266,37 @@ export async function restore(
       await writePrivateFile(preflightSql, restorePreflightSql(manifest.appSchemas));
       await writePrivateFile(validationSql, restoreValidationSql(manifest));
       // psql owns the one connection/transaction, including checks before COMMIT.
-      await runner.run(
-        'psql',
-        [
-          '--no-psqlrc',
-          '--no-password',
-          '--single-transaction',
-          '--quiet',
-          '--set=ON_ERROR_STOP=on',
-          '--set=ON_ERROR_ROLLBACK=off',
-          '--dbname',
-          target.database,
-          ...[preflightSql, ...authSql, appSql, ...triggerFiles, validationSql].flatMap(
-            (file) => ['--file', file],
-          ),
-        ],
-        { env: toLibpqEnvironment(target) },
-      );
+      try {
+        await runner.run(
+          'psql',
+          [
+            '--no-psqlrc',
+            '--no-password',
+            '--single-transaction',
+            '--quiet',
+            '--set=ON_ERROR_STOP=on',
+            '--set=ON_ERROR_ROLLBACK=off',
+            '--dbname',
+            target.database,
+            ...[preflightSql, ...authSql, appSql, ...triggerFiles, validationSql].flatMap(
+              (file) => ['--file', file],
+            ),
+          ],
+          { env: toLibpqEnvironment(target) },
+        );
+      } catch (error: unknown) {
+        const role =
+          error instanceof Error
+            ? /ERROR:\s+role "([^\r\n]+)" does not exist/u.exec(error.message)?.[1]
+            : undefined;
+        if (!role || !(error instanceof Error)) throw error;
+        const identifier = `"${role.replaceAll('"', '""')}"`;
+        throw new BackupError(
+          `${error.message}\nRestore transaction rolled back. The recovery database is missing role ${identifier}. ` +
+            `Create the role on the recovery database, then retry: CREATE ROLE ${identifier} NOLOGIN; ` +
+            'Role definitions, login credentials, and memberships are not included in this backup; configure those separately as needed.',
+        );
+      }
     } finally {
       await targetDb.end();
     }

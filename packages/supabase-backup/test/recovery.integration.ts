@@ -79,8 +79,10 @@ async function fixture(
     source: Awaited<ReturnType<typeof server.create>>,
     phase: 'before' | 'after',
   ) => Promise<void>,
+  prepareSource?: (source: Awaited<ReturnType<typeof server.create>>) => Promise<void>,
 ) {
   const source = await server.create(sourceSchema);
+  await prepareSource?.(source);
   const target = await server.create(authSchema);
   const store = new MemoryStore();
   const prefix = randomUUID();
@@ -133,6 +135,31 @@ async function fixture(
 }
 
 describe('PostgreSQL recovery safety', () => {
+  it('explains a missing grant role, rolls back, and succeeds after the role is recreated', async () => {
+    const role = `restore_role_${randomUUID().replaceAll('-', '')}`;
+    const f = await fixture(undefined, async (source) => {
+      await source.db.query(
+        `CREATE ROLE "${role}" NOLOGIN; GRANT SELECT ON public.profiles TO "${role}";`,
+      );
+    });
+    // Roles are cluster-wide, so remove the source grant before simulating a missing target role.
+    await f.source.db.query(
+      `REVOKE SELECT ON public.profiles FROM "${role}"; DROP ROLE "${role}";`,
+    );
+    await expect(f.apply()).rejects.toThrow(`CREATE ROLE "${role}" NOLOGIN;`);
+    await f.expectEmpty();
+    await f.target.db.query(`CREATE ROLE "${role}" NOLOGIN;`);
+    await f.apply();
+    expect(
+      (
+        await f.target.db.query(
+          "SELECT has_table_privilege($1, 'public.profiles', 'SELECT') AS allowed",
+          [role],
+        )
+      ).rows,
+    ).toEqual([{ allowed: true }]);
+  });
+
   it('preserves one snapshot, values, sequences, RLS, restricted access, and signup triggers', async () => {
     const f = await fixture(async (source, phase) => {
       if (phase === 'after')

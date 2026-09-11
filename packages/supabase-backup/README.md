@@ -184,6 +184,17 @@ any custom roles and required memberships on the target first. Missing roles or
 incompatible access rules cause the restore transaction to roll back. RLS
 policies and enabled/disabled RLS state are restored with their tables.
 
+If restore reports `role "cloudflare_hyperdrive" does not exist`, create that
+role in the **recovery project's Supabase dashboard → SQL Editor**, then retry:
+
+```sql
+CREATE ROLE "cloudflare_hyperdrive" NOLOGIN;
+```
+
+This allows the saved grants to be restored without enabling database logins.
+Configure the role's login credentials and required memberships separately when
+reconnecting Hyperdrive. A missing-role failure rolls back the restore transaction.
+
 **Auth configuration and the rest of Auth.** Providers and their secrets, SMTP,
 email templates, redirect URLs, rate limits, the JWT secret, and Auth Hooks are
 project settings held outside PostgreSQL. Point a hook at its restored function
