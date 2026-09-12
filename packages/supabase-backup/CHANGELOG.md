@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 3.3.0
+
+### Minor Changes
+
+- add local storage backend
+
 ## 3.2.0
 
 ### Minor Changes
