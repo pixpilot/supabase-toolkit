@@ -1,5 +1,16 @@
 # @pixpilot/supabase-backup
 
+## 3.2.0
+
+### Minor Changes
+
+- enhance error handling for missing roles during restore
+
+### Patch Changes
+
+- preserve access rules during restore
+- 393a6d2: Explain missing-role restore failures with a recovery-only CREATE ROLE ... NOLOGIN instruction, without skipping permissions or automatically granting access. Verify that the failed restore rolls back and a retry succeeds after recreating the role.
+
 ## 3.1.0
 
 ### Minor Changes
