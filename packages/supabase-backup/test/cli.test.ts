@@ -4,11 +4,14 @@ import type { Prompter, TextPromptOptions } from '../src/cli/prompt.js';
 import type { ObjectStore } from '../src/storage/object-store.js';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
+import packageJson from '../package.json' with { type: 'json' };
 import {
+  cliVersion,
   inputFromArguments,
   parseArguments,
   planCommand,
   usage,
+  versionLine,
 } from '../src/cli/command-line.js';
 import {
   backupFields,
@@ -199,6 +202,20 @@ describe('command-line parsing', () => {
     expect(usage).toContain('status');
     expect(usage).toContain('restore');
     expect(usage).toContain('--no-input');
+  });
+
+  it('reports the release that is actually running', () => {
+    // An `npx …@3` run resolves to whichever 3.x is newest that day, so the
+    // reported version has to be the one this build shipped.
+    expect(cliVersion).toBe(packageJson.version);
+    expect(versionLine).toBe(`supabase-backup ${packageJson.version}`);
+    expect(usage).toContain('--version');
+  });
+
+  it('accepts the version switch without a value', () => {
+    expect(parseArguments(['--version']).switches.has('--version')).toBe(true);
+    expect(parseArguments(['-v']).switches.has('-v')).toBe(true);
+    expect(() => parseArguments(['--version=3'])).toThrow('does not take a value');
   });
 });
 

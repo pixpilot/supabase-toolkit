@@ -61,6 +61,9 @@ jobs:
           APP_SCHEMAS: ${{ inputs.app-schemas }}
           PACKAGE_VERSION: ${{ inputs.package-version }}
         run: |
+          # `@3` resolves to whichever 3.x is newest today, so the log records
+          # both what was asked for and what the CLI reports it actually is.
+          echo "Requested @pixpilot/supabase-backup@$PACKAGE_VERSION (set the package-version input to pin a different release)."
           npx --yes "@pixpilot/supabase-backup@$PACKAGE_VERSION" backup --no-input \
             --source-database-url "$SOURCE_DATABASE_URL" \
             --age-recipient "$BACKUP_AGE_RECIPIENT" \

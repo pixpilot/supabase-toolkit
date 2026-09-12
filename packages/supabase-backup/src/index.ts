@@ -1,11 +1,13 @@
 export { backup, backupWithConfig } from './backup/backup.js';
 export {
   type CliArguments,
+  cliVersion,
   inputFromArguments,
   parseArguments,
   planCommand,
   runCli,
   usage,
+  versionLine,
 } from './cli/command-line.js';
 export {
   allFields,

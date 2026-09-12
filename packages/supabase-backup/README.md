@@ -343,7 +343,14 @@ is what a bare `supabase-backup` does.
 | `--no-access-checks`           | `restore` | Skip advisory default-grant and role-membership checks.           |
 | `--confirm-target <ref>`       | `restore` | Typed confirmation: project ref, else `<host>:<port>/<database>`. |
 | `--no-input`                   | all       | Never ask; fail when a value is missing.                          |
+| `-v`, `--version`              | all       | Print the version that is running.                                |
 | `-h`, `--help`                 | all       | Print the option list.                                            |
+
+Every run prints the version it is on before it starts, to stderr so command
+output stays machine readable. That matters because `@pixpilot/supabase-backup@3`
+resolves to whichever 3.x is newest on the day it runs: a CI log from months ago
+still says which release wrote that backup, and a run that picked up a newer one
+says so up front. The same version is recorded in each manifest as `cliVersion`.
 
 A flag value is visible to other processes and is kept in shell history. On a
 personal or shared machine, leave `--r2-secret-access-key`, `--age-identity`,

@@ -1,6 +1,7 @@
 import type { ObjectStore, StorageDriver } from '../storage/object-store.js';
 import type { InputValues } from './interactive.js';
 import type { Prompter, PromptStreams } from './prompt.js';
+import packageJson from '../../package.json' with { type: 'json' };
 import { backup } from '../backup/backup.js';
 import { loadStatusConfig } from '../core/config.js';
 import { BackupError } from '../core/errors.js';
@@ -54,7 +55,22 @@ const switchOptions = new Set([
   '--no-access-checks',
   '--help',
   '-h',
+  '--version',
+  '-v',
 ]);
+
+/**
+ * The release actually running, which is not always the one that was asked for.
+ *
+ * An `npx …@3` invocation resolves to whatever the newest 3.x is on the day it
+ * runs, so the version is reported on every run: a log months old then still
+ * says which release wrote that backup, and a run that picked up a newer one
+ * says so before it starts.
+ */
+export const cliVersion = packageJson.version;
+
+/** The line every run prints before it starts work. */
+export const versionLine = `supabase-backup ${cliVersion}`;
 
 export interface CliArguments {
   command: string;
@@ -94,6 +110,7 @@ Command options:
   --confirm-target <ref>        Typed confirmation: the Supabase project ref,
                                 or '<host>:<port>/<database>' elsewhere.
   --no-input                    Never ask; fail when a value is missing.
+  -v, --version                 Print the version that is running.
   -h, --help                    Show this help.
 
 Only the selected backend's storage options are required or asked for, so an
@@ -261,10 +278,16 @@ export async function runCli(
   streams: PromptStreams | undefined = interactiveStreams(),
 ): Promise<void> {
   const parsed = parseArguments(args);
+  if (parsed.switches.has('--version') || parsed.switches.has('-v')) {
+    process.stdout.write(`${versionLine}\n`);
+    return;
+  }
   if (parsed.switches.has('--help') || parsed.switches.has('-h')) {
     process.stdout.write(`${usage}\n`);
     return;
   }
+  // Written to stderr so command output stays machine readable.
+  process.stderr.write(`${versionLine}\n`);
   const prompter =
     parsed.switches.has('--no-input') || !streams ? undefined : createPrompter(streams);
   let run: () => Promise<unknown>;
