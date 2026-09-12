@@ -9,7 +9,10 @@ on:
       r2-bucket: {required: true, type: string}
       max-age-hours: {required: false, default: 36, type: number}
       postgres-client-version: {required: false, default: '17', type: string}
-      app-schemas: {required: false, default: public, type: string}
+      # Empty backs up every schema the project owns; name schemas only to
+      # restrict the run to exactly those.
+      app-schemas: {required: false, default: '', type: string}
+      exclude-schemas: {required: false, default: '', type: string}
       # Major range, so fixes arrive but a breaking release never does. The
       # flags below are the 3.x interface: bump this default in the same commit
       # that adopts a new major, never separately.
@@ -59,18 +62,23 @@ jobs:
           R2_BUCKET: ${{ inputs.r2-bucket }}
           BACKUP_PREFIX: ${{ inputs.backup-prefix }}
           APP_SCHEMAS: ${{ inputs.app-schemas }}
+          EXCLUDE_SCHEMAS: ${{ inputs.exclude-schemas }}
           PACKAGE_VERSION: ${{ inputs.package-version }}
         run: |
           # `@3` resolves to whichever 3.x is newest today, so the log records
           # both what was asked for and what the CLI reports it actually is.
           echo "Requested @pixpilot/supabase-backup@$PACKAGE_VERSION (set the package-version input to pin a different release)."
+          # Left out entirely, the backup takes every schema the project owns.
+          schema_flags=()
+          if [ -n "$APP_SCHEMAS" ]; then schema_flags+=(--schemas "$APP_SCHEMAS"); fi
+          if [ -n "$EXCLUDE_SCHEMAS" ]; then schema_flags+=(--exclude-schemas "$EXCLUDE_SCHEMAS"); fi
           npx --yes "@pixpilot/supabase-backup@$PACKAGE_VERSION" backup --no-input \
             --source-database-url "$SOURCE_DATABASE_URL" \
             --age-recipient "$BACKUP_AGE_RECIPIENT" \
             --r2-access-key-id "$R2_ACCESS_KEY_ID" \
             --r2-secret-access-key "$R2_SECRET_ACCESS_KEY" \
             --r2-endpoint "$R2_ENDPOINT" --r2-bucket "$R2_BUCKET" \
-            --prefix "$BACKUP_PREFIX" --schemas "$APP_SCHEMAS"
+            --prefix "$BACKUP_PREFIX" "${schema_flags[@]}"
       - name: Verify backup health
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.r2-access-key-id }}

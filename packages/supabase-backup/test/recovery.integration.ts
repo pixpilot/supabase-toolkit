@@ -103,6 +103,7 @@ async function fixture(
     {
       sourceDatabaseUrl: source.url,
       appSchemas: ['public'],
+      excludedSchemas: [],
       prefix,
       ageRecipient: 'age1test',
       accessKeyId: 'test',
@@ -553,6 +554,7 @@ describe('PostgreSQL recovery safety', () => {
         {
           sourceDatabaseUrl: source.url,
           appSchemas: ['public'],
+          excludedSchemas: [],
           prefix: randomUUID(),
           ageRecipient: 'age1test',
           accessKeyId: 'test',

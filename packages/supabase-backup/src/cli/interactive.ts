@@ -9,6 +9,7 @@ import {
   ensureValidBackupPrefix,
   ensureValidManifestKey,
   parseAppSchemas,
+  parseSchemaList,
 } from '../core/validation.js';
 import { databaseLabel, parseDatabaseUrl, restoreTargetRef } from '../db/database-url.js';
 import { listManifestKeys } from '../status/status.js';
@@ -86,10 +87,21 @@ export const ageRecipientField: InputField = {
 export const appSchemasField: InputField = {
   flag: '--schemas',
   name: 'APP_SCHEMAS',
-  question: 'Application schemas to back up, comma separated',
-  defaultValue: 'public',
+  question:
+    'Schemas to back up, comma separated (empty backs up every schema the project owns)',
+  optional: true,
   validate: (value: string): void => {
     parseAppSchemas(value);
+  },
+};
+
+export const excludedSchemasField: InputField = {
+  flag: '--exclude-schemas',
+  name: 'EXCLUDE_SCHEMAS',
+  question: 'Schemas to leave out, comma separated (empty leaves nothing out)',
+  optional: true,
+  validate: (value: string): void => {
+    parseSchemaList(value);
   },
 };
 
@@ -106,6 +118,7 @@ export function backupFieldsFor(driver: StorageDriver): readonly InputField[] {
     ...storageFields(driver),
     backupPrefixField,
     appSchemasField,
+    excludedSchemasField,
   ];
 }
 
@@ -134,6 +147,7 @@ export const allFields: readonly InputField[] = [
   ...allStorageFields,
   backupPrefixField,
   appSchemasField,
+  excludedSchemasField,
 ];
 
 /** Returns a copy of the values with every missing field asked for. */
@@ -145,6 +159,7 @@ export async function fillMissingInput(
   const filled: InputValues = { ...values };
   for (const field of fields) {
     if (filled[field.name]?.trim()) continue;
+    if (field.optional === true) continue;
     if (!prompter) {
       if (field.defaultValue !== undefined) {
         filled[field.name] = field.defaultValue;

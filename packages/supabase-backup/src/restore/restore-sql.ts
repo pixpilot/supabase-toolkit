@@ -6,9 +6,26 @@ function literal(value: string): string {
   return `'${value.replace(/'/gu, "''")}'`;
 }
 
-/** Rechecks the empty target under locks held until the entire restore commits. */
-export function restorePreflightSql(schemas: string[]): string {
+/**
+ * Rechecks the empty target under locks held until the entire restore commits.
+ *
+ * Managed storage tables are only checked, never locked: the restoring role is
+ * not their owner, and a lock it may not be allowed to take would fail a restore
+ * that can otherwise finish.
+ */
+export function restorePreflightSql(
+  schemas: string[],
+  storage: readonly string[] = [],
+): string {
   const names = schemas.map(literal).join(', ');
+  const storageChecks = storage
+    .map(
+      (table) =>
+        `  IF EXISTS (SELECT 1 FROM ${table}) THEN
+    RAISE EXCEPTION 'Target ${table} must be empty for recovery restore.';
+  END IF;`,
+    )
+    .join('\n');
   return `
 SET LOCAL standard_conforming_strings = on;
 LOCK TABLE auth.users, auth.identities IN ACCESS EXCLUSIVE MODE NOWAIT;
@@ -29,6 +46,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid IN ('auth.users'::regclass, 'auth.identities'::regclass) AND NOT tgisinternal) THEN
     RAISE EXCEPTION 'Target Auth tables already have custom triggers. Use a fresh recovery project.';
   END IF;
+${storageChecks}
 END
 $backup_preflight$;
 `;
@@ -36,15 +54,17 @@ $backup_preflight$;
 
 /** Checks row counts inside the restore transaction so a mismatch rolls back all writes. */
 export function restoreValidationSql(manifest: BackupManifest): string {
-  const checks = [...manifest.authRowCounts, ...manifest.appTableCounts].map(
-    ({ table, count }) => {
-      const quoted = table
-        .split('.')
-        .map((name) => `"${name}"`)
-        .join('.');
-      return `IF (SELECT COUNT(*) FROM ${quoted}) <> ${count} THEN RAISE EXCEPTION 'Restore row count does not match for %', ${literal(table)}; END IF;`;
-    },
-  );
+  const checks = [
+    ...manifest.authRowCounts,
+    ...(manifest.storageRowCounts ?? []),
+    ...manifest.appTableCounts,
+  ].map(({ table, count }) => {
+    const quoted = table
+      .split('.')
+      .map((name) => `"${name}"`)
+      .join('.');
+    return `IF (SELECT COUNT(*) FROM ${quoted}) <> ${count} THEN RAISE EXCEPTION 'Restore row count does not match for %', ${literal(table)}; END IF;`;
+  });
   return `SET LOCAL search_path = pg_catalog;
 DO $backup_validation$ BEGIN
 ${checks.join('\n')}

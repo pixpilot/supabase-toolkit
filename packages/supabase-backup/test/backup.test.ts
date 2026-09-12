@@ -133,10 +133,17 @@ describe('configuration and safety', () => {
     );
   });
 
-  it('validates configuration and never permits auth among app schemas', () => {
-    expect(loadBackupConfig(env).appSchemas).toEqual(['public']);
+  it('validates configuration and never permits managed schemas among app schemas', () => {
+    expect(loadBackupConfig(env).appSchemas).toBeUndefined();
+    expect(loadBackupConfig(env).excludedSchemas).toEqual([]);
+    expect(loadBackupConfig({ ...env, APP_SCHEMAS: 'public' }).appSchemas).toEqual([
+      'public',
+    ]);
+    expect(
+      loadBackupConfig({ ...env, EXCLUDE_SCHEMAS: 'audit, drizzle' }).excludedSchemas,
+    ).toEqual(['audit', 'drizzle']);
     expect(() => loadBackupConfig({ ...env, APP_SCHEMAS: 'public,auth' })).toThrow(
-      'must not include auth',
+      'application schemas',
     );
     expect(() =>
       loadStatusConfig({

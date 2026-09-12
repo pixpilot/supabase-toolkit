@@ -7,6 +7,7 @@ import {
   ensureValidAgeRecipient,
   ensureValidBackupPrefix,
   parseAppSchemas,
+  parseSchemaList,
 } from './validation.js';
 
 /*
@@ -17,7 +18,9 @@ import {
 
 export type BackupConfig = StorageConfig & {
   ageRecipient: string;
-  appSchemas: string[];
+  /** Schemas to dump whole. Unset backs up every schema the project owns. */
+  appSchemas?: string[];
+  excludedSchemas: string[];
   prefix: string;
   sourceDatabaseUrl: string;
 };
@@ -41,7 +44,8 @@ function backupPrefix(env: NodeJS.ProcessEnv): string {
 
 /** Loads and validates backup-only environment configuration. */
 export function loadBackupConfig(env = process.env): BackupConfig {
-  const appSchemas = parseAppSchemas(env['APP_SCHEMAS'] || 'public');
+  const named = env['APP_SCHEMAS']?.trim();
+  const excluded = env['EXCLUDE_SCHEMAS']?.trim();
   const ageRecipient = required(env, 'BACKUP_AGE_RECIPIENT');
   ensureValidAgeRecipient(ageRecipient);
   return {
@@ -49,7 +53,8 @@ export function loadBackupConfig(env = process.env): BackupConfig {
     ageRecipient,
     sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL'),
     prefix: backupPrefix(env),
-    appSchemas,
+    ...(named ? { appSchemas: parseAppSchemas(named) } : {}),
+    excludedSchemas: excluded ? parseSchemaList(excluded) : [],
   };
 }
 

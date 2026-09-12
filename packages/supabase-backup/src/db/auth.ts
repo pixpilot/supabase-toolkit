@@ -1,8 +1,9 @@
-import type { AuthTable, Column, TableCount } from '../core/manifest.js';
+import type { AuthTable, Column, StorageTable, TableCount } from '../core/manifest.js';
 
 import type { DatabaseConnection } from './database-url.js';
 import { Client } from 'pg';
 import { BackupError } from '../core/errors.js';
+import { storageTables } from '../core/manifest.js';
 import { redact } from '../utils/redact.js';
 import { databaseLabel } from './database-url.js';
 
@@ -20,6 +21,9 @@ const unreachableCodes = new Set([
   'ENOTFOUND',
   'ETIMEDOUT',
 ]);
+
+/** The driver's wording when TLS was required and the server offered none. */
+const noServerSsl = /does not support SSL/iu;
 
 /**
  * Explains a failed preflight connection without leaking the credentials.
@@ -40,9 +44,19 @@ export function preflightFailureMessage(
     typeof code === 'string' &&
     unreachableCodes.has(code) &&
     /^db\.[a-z0-9]+\.supabase\.co$/u.test(connection.host);
-  const hint = supabaseDirect
-    ? " A direct db.<project-ref>.supabase.co connection resolves to IPv6 only unless the IPv4 add-on is enabled; use the Session Pooler host on port 5432 instead, whose user is 'postgres.<project-ref>'."
-    : '';
+  /*
+   * A database that serves no TLS at all is the normal local one, and the
+   * driver's own wording says nothing about how to connect to it anyway. The
+   * hint names the URL parameter rather than offering a flag, because a
+   * connection setting belongs to the connection string that carries it.
+   */
+  let hint = '';
+  if (noServerSsl.test(reason))
+    hint =
+      " The database serves no TLS, which is how a local database such as the one 'supabase start' runs on port 54322 is set up. Add '?sslmode=disable' to the database URL to connect to it without TLS. Never do this for a database reached over a network.";
+  else if (supabaseDirect)
+    hint =
+      " A direct db.<project-ref>.supabase.co connection resolves to IPv6 only unless the IPv4 add-on is enabled; use the Session Pooler host on port 5432 instead, whose user is 'postgres.<project-ref>'.";
   return `Database preflight connection to ${databaseLabel(connection)} failed: ${reason}.${hint}`;
 }
 
@@ -176,6 +190,38 @@ export async function getExistingSchemas(
     `SELECT schema_name FROM information_schema.schemata WHERE schema_name IN (${values})`,
   );
   return result.rows.map(({ schema_name }) => schema_name);
+}
+
+/** Lists every schema the database has, so a backup can pick what it owns. */
+export async function getSchemaNames(db: Queryable): Promise<string[]> {
+  const result = await db.query<{ schema_name: string }>(
+    'SELECT nspname AS schema_name FROM pg_namespace ORDER BY nspname',
+  );
+  return result.rows.map(({ schema_name }) => schema_name);
+}
+
+/**
+ * Reports which managed storage tables this database has, and which it withholds.
+ *
+ * A database without Supabase Storage reports neither, so it is not treated as a
+ * backup that lost something. A table the connected role cannot read is reported
+ * separately, because that is worth saying out loud rather than dumping nothing.
+ */
+export async function getManagedStorageTables(
+  db: Queryable,
+): Promise<{ readable: StorageTable[]; unreadable: StorageTable[] }> {
+  const result = await db.query<{ table_name: string; readable: boolean }>(
+    "SELECT c.relname AS table_name, has_table_privilege(c.oid, 'SELECT') AS readable " +
+      'FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace ' +
+      "WHERE n.nspname = 'storage' AND c.relkind = 'r' AND c.relname IN ('buckets', 'objects')",
+  );
+  const found = new Map(
+    result.rows.map(({ table_name, readable }) => [`storage.${table_name}`, readable]),
+  );
+  return {
+    readable: storageTables.filter((table) => found.get(table) === true),
+    unreadable: storageTables.filter((table) => found.get(table) === false),
+  };
 }
 
 /**

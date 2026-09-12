@@ -1,4 +1,5 @@
 import { BackupError } from './errors.js';
+import { isManagedSchema, isSystemSchema } from './schemas.js';
 
 /**
  * Input checks for environment-supplied configuration.
@@ -142,19 +143,36 @@ export function ensureValidManifestKey(value: string): void {
     );
 }
 
-/** Splits and validates the comma-separated application schema list. */
-export function parseAppSchemas(value: string): string[] {
+/** Splits and validates a comma-separated schema list into schema identifiers. */
+export function parseSchemaList(value: string): string[] {
   const schemas = value
     .split(',')
     .map((schema) => schema.trim())
     .filter(Boolean);
-  if (
-    !schemas.length ||
-    schemas.includes('auth') ||
-    schemas.some((schema) => !/^[A-Za-z_][\w$]*$/u.test(schema))
-  ) {
+  if (schemas.some((schema) => !/^[A-Za-z_][\w$]*$/u.test(schema)))
+    throw new BackupError('Schema lists must be comma-separated schema names.');
+  return schemas;
+}
+
+/**
+ * Splits and validates the comma-separated list of schemas to back up whole.
+ *
+ * PostgreSQL's own catalogs and the schemas Supabase defines are refused here.
+ * Their definitions belong to the platform, and the durable rows inside `auth`
+ * and `storage` are backed up as data on their own.
+ */
+export function parseAppSchemas(value: string): string[] {
+  const schemas = parseSchemaList(value);
+  const refused = schemas.filter(
+    (schema) => isSystemSchema(schema) || isManagedSchema(schema),
+  );
+  if (!schemas.length || refused.length) {
     throw new BackupError(
-      'APP_SCHEMAS must contain valid application schemas and must not include auth.',
+      `--schemas must name application schemas${
+        refused.length
+          ? `; ${refused.join(', ')} ${refused.length > 1 ? 'are' : 'is'} maintained by PostgreSQL or Supabase and cannot be dumped whole`
+          : ''
+      }.`,
     );
   }
   return schemas;

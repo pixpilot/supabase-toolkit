@@ -5,6 +5,18 @@ import { parseAppSchemas } from './validation.js';
 
 export const authTables = ['auth.users', 'auth.identities'] as const;
 export type AuthTable = (typeof authTables)[number];
+
+/**
+ * Supabase-managed storage tables, in the order a restore must insert them.
+ *
+ * These hold bucket settings and object metadata. Like the Auth tables they are
+ * owned by Supabase, so they are dumped and restored as data only. They are
+ * included only when the source database has them, so a plain PostgreSQL
+ * database still backs up.
+ */
+export const storageTables = ['storage.buckets', 'storage.objects'] as const;
+export type StorageTable = (typeof storageTables)[number];
+
 export interface Column {
   dataType: string;
   name: string;
@@ -36,6 +48,8 @@ export interface BackupManifest {
   environment: string;
   pgDumpVersion: string;
   postgresServerVersion: string;
+  storageRowCounts?: TableCount[];
+  storageTables?: StorageTable[];
 }
 
 /** Key-layout generation; bump only when the object-key structure changes. */
@@ -104,7 +118,8 @@ export function parseManifest(value: string): BackupManifest {
     !item.authTables.every((table, index) => table === authTables[index]) ||
     !item.authColumns ||
     !validCounts(item.appTableCounts) ||
-    !validCounts(item.authRowCounts)
+    !validCounts(item.authRowCounts) ||
+    !validStorage(item)
   ) {
     throw new BackupError('Backup manifest is incomplete or invalid.');
   }
@@ -139,6 +154,32 @@ export function parseManifest(value: string): BackupManifest {
 
 function isText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Accepts a manifest without storage metadata, and validates it when present.
+ *
+ * Backups written before storage was included carry neither field, and both are
+ * required together once either appears, so a restore never reads counts for
+ * tables it was not told about.
+ */
+function validStorage(item: Partial<BackupManifest>): boolean {
+  if (item.storageTables === undefined && item.storageRowCounts === undefined)
+    return true;
+  const tables = item.storageTables;
+  if (
+    !Array.isArray(tables) ||
+    !tables.length ||
+    !validCounts(item.storageRowCounts) ||
+    item.storageRowCounts.length !== tables.length
+  )
+    return false;
+  const expected = storageTables.filter((table) => tables.includes(table));
+  return (
+    expected.length === tables.length &&
+    expected.every((table, index) => table === tables[index]) &&
+    item.storageRowCounts.every(({ table }) => tables.includes(table as StorageTable))
+  );
 }
 
 function validCounts(value: unknown): value is TableCount[] {

@@ -17,6 +17,7 @@ export {
   confirmRestoreTarget,
   defaultBackupPrefix,
   describeBackupKey,
+  excludedSchemasField,
   fillMissingInput,
   type InputField,
   type InputValues,
@@ -37,6 +38,15 @@ export { loadBackupConfig, loadRestoreConfig, loadStatusConfig } from './core/co
 export { BackupError } from './core/errors.js';
 export { type BackupManifest, backupObjectKeys, parseManifest } from './core/manifest.js';
 export {
+  isManagedSchema,
+  isSystemSchema,
+  migrationSchemas,
+  postgresSystemSchemaPatterns,
+  postgresSystemSchemas,
+  selectBackupSchemas,
+  supabaseManagedSchemas,
+} from './core/schemas.js';
+export {
   ensureNoTemplatePlaceholder,
   ensureOpaqueSecret,
   ensureValidAgeIdentity,
@@ -46,10 +56,13 @@ export {
   ensureValidR2Bucket,
   ensureValidR2Endpoint,
   parseAppSchemas,
+  parseSchemaList,
 } from './core/validation.js';
 export {
   ensureApplicationSchemasEmpty,
   getExistingSchemas,
+  getManagedStorageTables,
+  getSchemaNames,
   preflightFailureMessage,
 } from './db/auth.js';
 export {

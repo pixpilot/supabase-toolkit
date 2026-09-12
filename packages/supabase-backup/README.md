@@ -1,7 +1,8 @@
 # @pixpilot/supabase-backup
 
-Encrypted backups of application schemas plus `auth.users`, `auth.identities`,
-and their trigger definitions, captured from one consistent database snapshot.
+Encrypted backups of every schema a Supabase project owns, plus the rows of
+`auth.users`, `auth.identities`, `storage.buckets`, and `storage.objects`,
+captured from one consistent database snapshot.
 It is deliberately not full Supabase-project disaster recovery: read
 [what a restore does not carry](#what-a-restore-does-not-carry) before relying on
 it. Requires Node
@@ -98,10 +99,39 @@ stored so their triggers can be recovered; restore never replaces the managed
 Auth tables. Uploaded archives are downloaded and verified before the manifest
 is published.
 
-`--prefix` defaults to `production/database`. `--schemas` is comma-separated and
-defaults to `public`; `auth` is never an application schema. Backups fail if non-empty `auth.mfa_factors`,
+`--prefix` defaults to `production/database`. Backups fail if non-empty `auth.mfa_factors`,
 `auth.sso_providers`, or `auth.saml_providers` would be omitted. R2 must be a
 private bucket with bucket-scoped credentials.
+
+## What a backup takes
+
+Left alone, a backup takes **every schema the project owns**, whole: `public`,
+`drizzle`, Prisma or other tool schemas, anything added later, and
+`supabase_migrations`, which is kept with both its definitions and its rows.
+Nothing has to be named for a new schema to reach the backup.
+
+Two groups are left out, because they are not the project's to define:
+
+| Group            | Schemas                                                                                                                                                                         | Why                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| PostgreSQL's own | `pg_catalog`, `pg_toast`, `information_schema`, `pg_temp_*`, `pg_toast_temp_*`                                                                                                  | PostgreSQL maintains them for itself.              |
+| Supabase-managed | `auth`, `storage`, `realtime`, `supabase_functions`, `graphql`, `graphql_public`, `extensions`, `pgsodium`, `pgsodium_masks`, `vault`, `pgbouncer`, `net`, `cron`, `_analytics` | Supabase defines them on every project it creates. |
+
+The durable rows inside the managed ones are still backed up, table by table:
+`auth.users`, `auth.identities`, `storage.buckets`, and `storage.objects`. They
+are dumped and restored as data, never as definitions.
+
+Two flags override the selection, and both are flags only — neither is ever
+asked for at the prompt:
+
+- `--schemas a,b` backs up **only** those schemas. Nothing is discovered, so a
+  schema added later is not picked up until it is named. A schema the source
+  database does not have fails the run rather than being skipped. Supabase-managed
+  and PostgreSQL schemas are refused here; their data is backed up anyway.
+- `--exclude-schemas a,b` drops schemas from whatever the run would take, whether
+  discovered or named.
+
+The managed `auth` and `storage` rows are backed up whichever flags are passed.
 
 ## R2 lifecycle retention
 
@@ -201,10 +231,10 @@ functions and tables that must remain private.
 
 ## What a restore does not carry
 
-A backup holds the application schemas plus the rows and trigger definitions
-of `auth.users` and `auth.identities`. Everything below survives only because you
-recreate it, so a recovery project is not usable until you have worked through
-this list. Plan the drill with that in mind, and keep the sources of these values
+A backup holds the application schemas, the rows and trigger definitions of
+`auth.users` and `auth.identities`, and the rows of `storage.buckets` and
+`storage.objects`. Everything below survives only because you recreate it, so a
+recovery project is not usable until you have worked through this list. Plan the drill with that in mind, and keep the sources of these values
 somewhere the loss of the project cannot take with it.
 
 **Role definitions.** Application privileges and ownership are restored, but
@@ -236,11 +266,18 @@ Only `auth.users` and `auth.identities` are backed up, so sessions and refresh
 tokens are gone and every user signs in again. MFA factors and SSO/SAML
 providers are refused at backup time rather than silently dropped.
 
-**Everything in other schemas.** Storage buckets and object metadata live in
-`storage` and the files themselves live in Supabase's object store; neither is
-included. The same applies to Realtime publications, `cron` jobs, queues, Vault
-secrets, extensions installed into `extensions`, and any schema you did not name
-in `--schemas`.
+**Storage files and storage policies.** Bucket settings and object metadata in
+`storage.buckets` and `storage.objects` are backed up and restored as rows, the
+same way Auth rows are; both tables must be empty on the target. The files
+themselves live in Supabase's object store and are not included, so restored
+metadata points at objects you still have to re-upload. RLS policies on
+`storage.objects` are captured in the archive but are not applied by a restore;
+recreate them.
+
+**The Supabase-managed schemas themselves.** Realtime publications, `cron` jobs,
+queues, Vault secrets, and extensions installed into `extensions` live in schemas
+Supabase defines, so their definitions and rows are not carried. A fresh project
+brings its own.
 
 **Everything outside the database.** Edge functions, their secrets, API keys,
 custom domains, network restrictions, and the project's own settings.
@@ -282,9 +319,10 @@ rather than asking whether you meant to. To verify an archive without writing
 anything, run it unattended instead — without `--apply` it downloads, checks the
 checksums, decrypts, inspects both archives, and stops.
 
-- The prefix prompt offers `production/database` as its default and `--schemas`
-  offers `public`, so pressing Enter accepts them. A default is only ever shown
-  for a value that is safe to display, never for a secret.
+- The prefix prompt offers `production/database` as its default, so pressing
+  Enter accepts it. A default is only ever shown for a value that is safe to
+  display, never for a secret. `--schemas` and `--exclude-schemas` are never
+  asked for: left out, a backup takes every schema the project owns.
 - A secret typed at the prompt is not echoed and never reaches the process
   arguments, which are visible to other processes and are kept in shell history.
   Prefer the prompt over `--r2-secret-access-key`, `--age-identity`, and the two
@@ -336,7 +374,8 @@ is what a bare `supabase-backup` does.
 | `--age-identity <AGE-SECRET…>` | `restore` | Private identity used to decrypt.                                 |
 | `--target-database-url <url>`  | `restore` | Database to restore into, required by `--apply`.                  |
 | `--prefix <prefix>`            | all       | Object-key prefix. Default: `production/database`.                |
-| `--schemas <a,b>`              | `backup`  | Application schemas. Default: `public`.                           |
+| `--schemas <a,b>`              | `backup`  | Back up only these schemas. Default: all the project owns.        |
+| `--exclude-schemas <a,b>`      | `backup`  | Schemas to leave out.                                             |
 | `--max-age-hours <hours>`      | `status`  | Fail when the newest backup is older.                             |
 | `--key <manifest-key>`         | `restore` | Manifest to restore, ending in `.json`.                           |
 | `--apply`                      | `restore` | Write to the target database; omit for a dry run.                 |
@@ -345,6 +384,18 @@ is what a bare `supabase-backup` does.
 | `--no-input`                   | all       | Never ask; fail when a value is missing.                          |
 | `-v`, `--version`              | all       | Print the version that is running.                                |
 | `-h`, `--help`                 | all       | Print the option list.                                            |
+
+A database URL is treated as requiring TLS unless it says otherwise. A local
+database serves none, so a run against one — `supabase start` listens on port
+54322 — fails preflight with `The server does not support SSL connections` until
+the URL carries `?sslmode=disable`:
+
+```bash
+--target-database-url 'postgresql://postgres:postgres@localhost:54322/postgres?sslmode=disable'
+```
+
+Use that only for a database on the same machine. A database reached over a
+network must keep TLS on.
 
 Every run prints the version it is on before it starts, to stderr so command
 output stays machine readable. That matters because `@pixpilot/supabase-backup@3`
@@ -477,9 +528,11 @@ jobs:
       r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
 
-`postgres-client-version`, `package-version`, and `app-schemas` are optional.
-`app-schemas` defaults to `public`; list all application schemas that must be
-recovered. The workflow passes configuration as quoted CLI flags.
+`postgres-client-version`, `package-version`, `app-schemas`, and
+`exclude-schemas` are optional. Both schema inputs are empty by default, so the
+backup takes every schema the project owns; set `app-schemas` only to restrict a
+run to exactly the schemas you name. The workflow passes configuration as quoted
+CLI flags.
 
 `package-version` selects the published npm release and defaults to `'3'`, the
 major this workflow's flags belong to. A major range takes fixes and minors

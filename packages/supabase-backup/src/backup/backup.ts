@@ -85,7 +85,6 @@ export async function backupWithConfig(
       authSha256,
       appEncryptedBytes: appBytes,
       authEncryptedBytes: authBytes,
-      appSchemas: config.appSchemas,
       authTables: [...authTables],
       cliVersion: packageJson.version,
     };

@@ -11,6 +11,8 @@ export interface InputField {
   defaultValue?: string;
   flag: string;
   name: string;
+  /** Carried by its flag only: never asked for, and unset when it is absent. */
+  optional?: boolean;
   question: string;
   secret?: boolean;
   validate?: (value: string) => void;

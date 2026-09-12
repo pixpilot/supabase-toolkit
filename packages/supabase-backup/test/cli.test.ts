@@ -244,14 +244,26 @@ describe('filling missing values', () => {
     const prompter = new StubPrompter([]);
     const filled = await fillMissingInput(
       backupFields,
-      { ...given, APP_SCHEMAS: '' },
+      { ...given, BACKUP_PREFIX: '' },
       prompter,
     );
-    expect(prompter.asked).toEqual(['Application schemas to back up, comma separated']);
-    expect(filled['APP_SCHEMAS']).toBe('public');
+    expect(prompter.asked).toEqual(['Backup object-key prefix']);
+    expect(filled['BACKUP_PREFIX']).toBe(defaultBackupPrefix);
   });
 
-  it('applies the standard prefix and schemas when nothing can be asked', async () => {
+  it('never asks for the schema lists, which back up everything when left out', async () => {
+    const prompter = new StubPrompter([]);
+    const filled = await fillMissingInput(
+      backupFields,
+      { ...given, APP_SCHEMAS: '', EXCLUDE_SCHEMAS: '' },
+      prompter,
+    );
+    expect(prompter.asked).toEqual([]);
+    expect(filled['APP_SCHEMAS']).toBe('');
+    expect(filled['EXCLUDE_SCHEMAS']).toBe('');
+  });
+
+  it('applies the standard prefix when nothing can be asked', async () => {
     const filled = await fillMissingInput(
       backupFields,
       { ...given, BACKUP_PREFIX: '', APP_SCHEMAS: '' },
@@ -259,7 +271,7 @@ describe('filling missing values', () => {
     );
     expect(defaultBackupPrefix).toBe('production/database');
     expect(filled['BACKUP_PREFIX']).toBe(defaultBackupPrefix);
-    expect(filled['APP_SCHEMAS']).toBe('public');
+    expect(filled['APP_SCHEMAS']).toBe('');
   });
 
   it('names the missing flag when nothing can be asked', async () => {
@@ -639,7 +651,7 @@ describe('restoring into a database', () => {
       'Access',
       'supabase_auth_admin',
       'Auth Hooks',
-      'Storage objects',
+      'object metadata are restored',
       'edge functions',
       'signs in again',
     ])
@@ -675,6 +687,18 @@ describe('diagnosing a failed preflight connection', () => {
       Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH' }),
     );
     expect(message).toContain('Session Pooler');
+  });
+
+  it('names the URL parameter when the database serves no TLS', () => {
+    const local = parseDatabaseUrl(
+      'postgresql://postgres:secret@localhost:54322/postgres',
+    );
+    const message = preflightFailureMessage(
+      local,
+      new Error('The server does not support SSL connections'),
+    );
+    expect(message).toContain('localhost:54322/postgres');
+    expect(message).toContain('sslmode=disable');
   });
 
   it('adds no hint when the host answered', () => {

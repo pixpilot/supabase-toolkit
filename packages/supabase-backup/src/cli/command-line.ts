@@ -99,9 +99,15 @@ Connection options:
   --age-recipient <age1…>       Public recipient used to encrypt a backup.
   --age-identity <AGE-SECRET…>  Private identity used to decrypt a backup.
 
+A database URL is treated as requiring TLS unless it says otherwise. A local
+database that serves no TLS, such as the one 'supabase start' runs on port
+54322, needs '?sslmode=disable' on the URL.
+
 Command options:
   --prefix <prefix>             Object-key prefix. Default: production/database.
-  --schemas <a,b>               Application schemas. Default: public.
+  --schemas <a,b>               Back up only these schemas. Default: every
+                                schema the project owns.
+  --exclude-schemas <a,b>       Schemas to leave out.
   --max-age-hours <hours>       Fail status when the newest backup is older.
   --key <manifest-key>          Manifest to restore.
   --apply                       Write to the target database.
@@ -118,6 +124,11 @@ Only the selected backend's storage options are required or asked for, so an
 to one backend selects it, so --storage-root alone is enough to mean local. A
 terminal run that passes no storage option at all is offered the list to pick
 from, and one that names no command is offered the commands.
+
+Left alone, a backup takes every schema the project owns, including ones added
+later. PostgreSQL's catalogs and the schemas Supabase defines are left out;
+the rows of auth.users, auth.identities, storage.buckets, and storage.objects
+are backed up on their own, and supabase_migrations is kept whole.
 
 The environment is never read. Anything not passed is asked for when the session
 is a terminal, so a missing --key offers the newest backups to choose from. A

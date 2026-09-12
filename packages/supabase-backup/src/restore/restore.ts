@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { loadRestoreConfig } from '../core/config.js';
 import { BackupError } from '../core/errors.js';
-import { parseManifest } from '../core/manifest.js';
+import { parseManifest, storageTables } from '../core/manifest.js';
 import { ensureValidManifestKey } from '../core/validation.js';
 import {
   connectForPreflight,
@@ -14,6 +14,8 @@ import {
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
   getExistingSchemas,
+  getManagedStorageTables,
+  getTableCounts,
 } from '../db/auth.js';
 import {
   databaseLabel,
@@ -53,19 +55,22 @@ export interface RestoreOptions {
   key: string;
 }
 
-/** Renders one Auth table's data to SQL for the shared restore transaction. */
+/**
+ * Renders one managed table's data to SQL for the shared restore transaction.
+ *
+ * Auth and Storage tables are owned by Supabase and already exist on the target,
+ * so only their rows are taken from the archive. The name is checked against the
+ * known list here, because it reaches pg_restore as a selection pattern.
+ */
 export function authRestoreArguments(
   outputFile: string,
   table: string,
   archive: string,
 ): string[] {
   const [schema, name, extra] = table.split('.');
-  if (
-    schema !== 'auth' ||
-    !['users', 'identities'].includes(name ?? '') ||
-    extra !== undefined
-  )
-    throw new BackupError(`Auth table '${table}' must be schema-qualified.`);
+  const managed = ['auth.users', 'auth.identities', ...storageTables];
+  if (!managed.includes(table) || schema === undefined || extra !== undefined)
+    throw new BackupError(`Managed table '${table}' must be schema-qualified.`);
   return [
     '--file',
     outputFile,
@@ -192,8 +197,11 @@ The database is restored; the project is not. Set these up by hand:
                 from config.toml.
   Auth settings Providers and their secrets, SMTP, email templates, redirect
                 URLs, and the JWT secret.
-  Elsewhere     Storage objects, edge functions and their secrets, cron jobs,
-                Vault secrets, and anything in a schema that was not backed up.
+  Storage       Bucket settings and object metadata are restored when the
+                backup holds them, but the files themselves are not: re-upload
+                them, and recreate the RLS policies on storage.objects.
+  Elsewhere     Cron jobs, Vault secrets, edge functions and their secrets, and
+                anything in a schema that was not backed up.
 
 Sessions are not part of a backup either, so every user signs in again. Verify
 that an existing user can, and that one representative workflow runs, before
@@ -279,7 +287,7 @@ export async function restore(
     }
     if (!target) {
       process.stdout.write(
-        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; Auth tables ${manifest.authTables.join(', ')}. The archive is intact and decrypts. Pass --target-database-url to also check that a database can accept it.\n`,
+        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; managed tables ${[...manifest.authTables, ...(manifest.storageTables ?? [])].join(', ')}. The archive is intact and decrypts. Pass --target-database-url to also check that a database can accept it.\n`,
       );
       return manifest;
     }
@@ -296,6 +304,23 @@ export async function restore(
       }
       logRestoreProgress('Checking target Auth tables are empty...');
       await ensureAuthTablesEmpty(targetDb);
+      const managedTables = [...manifest.authTables, ...(manifest.storageTables ?? [])];
+      if (manifest.storageTables?.length) {
+        logRestoreProgress('Checking target storage tables are empty...');
+        const { readable } = await getManagedStorageTables(targetDb);
+        const missing = manifest.storageTables.filter(
+          (table) => !readable.includes(table),
+        );
+        if (missing.length)
+          throw new BackupError(
+            `Target is missing, or cannot read, ${missing.join(', ')}. Restore into a Supabase project with Storage enabled.`,
+          );
+        const counts = await getTableCounts(targetDb, manifest.storageTables);
+        if (counts.some(({ count }) => count !== 0))
+          throw new BackupError(
+            'Target storage.buckets and storage.objects must be empty for recovery restore.',
+          );
+      }
       logRestoreProgress('Checking target application schemas are empty...');
       await ensureApplicationSchemasEmpty(targetDb, manifest.appSchemas);
       logRestoreProgress('Preparing application schemas and access rules...');
@@ -310,7 +335,7 @@ export async function restore(
       const defaultsSql = join(directory, 'target-defaults.sql');
       const appSql = join(directory, 'app.sql');
       const authSql: string[] = [];
-      for (const table of manifest.authTables) {
+      for (const table of managedTables) {
         logRestoreProgress(`Preparing data for ${table}...`);
         const file = join(directory, `${table}.sql`);
         await runner.run('pg_restore', authRestoreArguments(file, table, authDump));
@@ -346,7 +371,7 @@ export async function restore(
       );
       await writePrivateFile(
         preflightSql,
-        restorePreflightSql(manifest.appSchemas) +
+        restorePreflightSql(manifest.appSchemas, manifest.storageTables ?? []) +
           prepareRestoreDefaultsSql(manifest.appSchemas),
       );
       await writePrivateFile(defaultsSql, restoreTargetDefaultsSql());
@@ -357,7 +382,7 @@ export async function restore(
           file: preflightSql,
         },
         ...authSql.map((file, index) => ({
-          message: `Restoring ${manifest.authTables[index]} data...`,
+          message: `Restoring ${managedTables[index]} data...`,
           file,
         })),
         ...application.schemaSql.map((file) => ({
