@@ -10,7 +10,7 @@ export interface ProgramRunner {
   run: (
     command: string,
     args: string[],
-    options?: { env?: NodeJS.ProcessEnv },
+    options?: { env?: NodeJS.ProcessEnv; onStdout?: (chunk: string) => void },
   ) => Promise<string>;
 }
 
@@ -35,7 +35,9 @@ export const systemRunner: ProgramRunner = {
       let stdout = '';
       let stderr = '';
       child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
+        const text = chunk.toString();
+        stdout += text;
+        options.onStdout?.(text);
       });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr = `${stderr}${chunk.toString()}`.slice(-stderrLimit * 2);

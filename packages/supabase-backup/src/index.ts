@@ -1,3 +1,4 @@
+export type { AccessChecks } from './access-checks.js';
 export {
   ensureApplicationSchemasEmpty,
   getExistingSchemas,

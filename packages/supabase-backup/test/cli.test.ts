@@ -3,7 +3,7 @@ import type { InputValues } from '../src/interactive.js';
 import type { Prompter, TextPromptOptions } from '../src/prompt.js';
 import type { ObjectStore } from '../src/r2.js';
 import { PassThrough } from 'node:stream';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { preflightFailureMessage } from '../src/auth.js';
 import {
   inputFromArguments,
@@ -24,6 +24,7 @@ import {
   statusFields,
 } from '../src/interactive.js';
 import { createPrompter, interactiveStreams, isInteractive } from '../src/prompt.js';
+import * as restoreModule from '../src/restore.js';
 import {
   appRestoreArguments,
   authRestoreArguments,
@@ -148,6 +149,21 @@ function terminalStreams(): {
 }
 
 describe('command-line parsing', () => {
+  it('accepts the restore-only advisory opt-out and rejects values or other commands', () => {
+    expect(
+      parseArguments(['restore', '--no-access-checks']).switches.has(
+        '--no-access-checks',
+      ),
+    ).toBe(true);
+    expect(() => parseArguments(['restore', '--no-access-checks=true'])).toThrow(
+      'does not take a value',
+    );
+    expect(() => parseArguments(['backup', '--no-access-checks'])).toThrow(
+      'only supported for restore',
+    );
+    expect(usage).toContain('--no-access-checks');
+    expect(usage).toContain('enabled by default');
+  });
   it('reads a command, spaced values, inline values, and switches', () => {
     const parsed = parseArguments([
       'restore',
@@ -353,6 +369,37 @@ describe('confirming a restore target', () => {
 });
 
 describe('planning a command', () => {
+  it.each([
+    { switches: [], enabled: true },
+    { switches: ['--no-access-checks'], enabled: false },
+  ])(
+    'passes accessChecks=$enabled to the restore operation',
+    async ({ switches, enabled }) => {
+      const restoreCall = vi
+        .spyOn(restoreModule, 'restore')
+        .mockRejectedValue(new Error('Recorded restore call'));
+      try {
+        const run = await planCommand(
+          args(
+            'restore',
+            {
+              ...connectionFlags,
+              '--key': 'production/database/v1/20260101T000000Z/manifest.json',
+            },
+            switches,
+          ),
+          undefined,
+        );
+        await expect(run()).rejects.toThrow('Recorded restore call');
+        expect(restoreCall).toHaveBeenCalledWith(
+          expect.objectContaining({ accessChecks: enabled }),
+          expect.anything(),
+        );
+      } finally {
+        restoreCall.mockRestore();
+      }
+    },
+  );
   it('keeps configuration flags apart from command flags', () => {
     const parsed = inputFromArguments(
       args('restore', { ...connectionFlags, '--key': 'a/manifest.json' }),

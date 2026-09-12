@@ -9,6 +9,7 @@ import {
   getAuthColumns,
   getTableCounts,
 } from './auth.js';
+import { captureAccessChecks } from './capture-access-checks.js';
 import { parseDatabaseUrl, toLibpqEnvironment } from './database-url.js';
 import { BackupError } from './errors.js';
 import { authTables } from './manifest.js';
@@ -46,6 +47,7 @@ export async function dumpDatabase(
     ).rows[0]?.fingerprint;
     if (!appAccessFingerprint)
       throw new BackupError('Could not capture application access rules.');
+    const accessChecks = await captureAccessChecks(db, config.appSchemas);
     const common = ['--format=custom', '--strict-names', `--snapshot=${snapshot}`];
     const options = { env: toLibpqEnvironment(connection) };
     await runner.run(
@@ -70,6 +72,7 @@ export async function dumpDatabase(
       options,
     );
     return {
+      ...(accessChecks ? { accessChecks } : {}),
       postgresServerVersion,
       pgDumpVersion,
       authColumns,

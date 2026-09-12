@@ -1,9 +1,10 @@
 import type { BackupManifest } from '../src/manifest.js';
 import type { ProgramRunner } from '../src/process.js';
 import type { ObjectStore } from '../src/r2.js';
+import type { RestoreOptions } from '../src/restore.js';
 import { randomUUID } from 'node:crypto';
-import { copyFile } from 'node:fs/promises';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { appendFile, copyFile } from 'node:fs/promises';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { backupWithConfig } from '../src/backup.js';
 import { backupObjectKeys } from '../src/manifest.js';
 import { systemRunner } from '../src/process.js';
@@ -74,6 +75,8 @@ afterAll(async () => {
   await server?.stop();
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 async function fixture(
   hook?: (
     source: Awaited<ReturnType<typeof server.create>>,
@@ -110,9 +113,12 @@ async function fixture(
     { runner: hookedRunner, store },
   );
   const key = backupObjectKeys(prefix, new Date(manifest.createdAt)).manifest;
-  const apply = async () =>
+  const apply = async (
+    restoreRunner: ProgramRunner = runner,
+    extra: Pick<RestoreOptions, 'accessChecks'> = {},
+  ) =>
     restore(
-      { apply: true, confirmTarget: target.confirmTarget, key },
+      { apply: true, confirmTarget: target.confirmTarget, key, ...extra },
       {
         TARGET_DATABASE_URL: target.url,
         AGE_IDENTITY: 'AGE-SECRET-KEY-TEST',
@@ -121,7 +127,7 @@ async function fixture(
         R2_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
         R2_BUCKET: 'test-backups',
       },
-      { store, runner },
+      { store, runner: restoreRunner },
     );
   const expectEmpty = async () => {
     expect(
@@ -135,6 +141,193 @@ async function fixture(
 }
 
 describe('PostgreSQL recovery safety', () => {
+  it('reports each restore phase in execution order and announces success after commit', async () => {
+    const f = await fixture();
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await f.apply();
+    const logs = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+    output.mockRestore();
+    const phases = [
+      'Starting restore...',
+      'Loading backup manifest...',
+      'Checking PostgreSQL tool compatibility...',
+      'Downloading application and Auth archives and verifying checksums...',
+      'Decrypting application archive...',
+      'Decrypting Auth archive...',
+      'Checking decrypted archives can be read...',
+      'Connecting to restore target',
+      'Checking target Auth table compatibility...',
+      'Checking target Auth tables are empty...',
+      'Checking target application schemas are empty...',
+      'Preparing application schemas and access rules...',
+      'Preparing data for auth.users...',
+      'Preparing data for auth.identities...',
+      'Preparing application schema and data SQL...',
+      'Preparing Auth triggers...',
+      'Starting database restore transaction...',
+      'Locking target tables and preparing default privileges...',
+      'Restoring auth.users data...',
+      'Restoring auth.identities data...',
+      'Restoring existing schema ownership and grants...',
+      'Restoring application schemas, data, and access rules...',
+      'Reinstating target default privileges...',
+      'Restoring Auth triggers...',
+      'Validating restored row counts, ownership, and privileges...',
+      'Validation passed. Committing restore...',
+      'Restore transaction committed successfully.',
+      'Checking default privileges and role memberships (advisory)...',
+      'Configured default privileges match the backup.',
+      'Cluster role memberships match the backup.',
+    ];
+    let previous = -1;
+    for (const phase of phases) {
+      const position = logs.indexOf(`[restore] ${phase}`);
+      expect(position, phase).toBeGreaterThan(previous);
+      previous = position;
+    }
+    expect(logs).not.toContain('unused');
+    expect(logs).not.toContain('AGE-SECRET-KEY-TEST');
+    expect(f.manifest.accessChecks).toMatchObject({ version: 1 });
+  });
+
+  it('restores old backups without requiring an advisory baseline', async () => {
+    const f = await fixture();
+    const { accessChecks: _accessChecks, ...old } = f.manifest;
+    f.store.values.set(f.key, Buffer.from(JSON.stringify(old)));
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await f.apply();
+    const logs = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+    expect(logs).toContain('Restore transaction committed successfully.');
+    expect(logs).toContain('Advisory checks skipped');
+    expect(logs).not.toContain('Cluster role memberships match');
+  });
+
+  it('can disable the new advisory checks while still completing a validated restore', async () => {
+    const f = await fixture();
+    await f.target.db.query(
+      'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO api_anon',
+    );
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await f.apply(runner, { accessChecks: false });
+    const logs = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+    expect(logs).toContain('Restore transaction committed successfully.');
+    expect(logs).toContain('Advisory access checks disabled (--no-access-checks).');
+    expect(logs).not.toContain('Checking default privileges and role memberships');
+    expect(logs).not.toContain('Warning: configured default privileges differ');
+  });
+
+  it('reports changed defaults and memberships after commit without changing membership grants', async () => {
+    const f = await fixture();
+    const member = `advisory_member_${randomUUID().replaceAll('-', '')}`;
+    const parent = `advisory_parent_${randomUUID().replaceAll('-', '')}`;
+    await f.target.db.query(`
+      CREATE ROLE ${member} NOLOGIN;
+      CREATE ROLE ${parent} NOLOGIN;
+      GRANT ${parent} TO ${member} WITH ADMIN OPTION;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO api_anon;
+    `);
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await f.apply();
+    const logs = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+    const committed = logs.indexOf('Restore transaction committed successfully.');
+    expect(committed).toBeGreaterThan(-1);
+    expect(logs.indexOf('Warning: configured default privileges differ')).toBeGreaterThan(
+      committed,
+    );
+    expect(logs.indexOf('Warning: cluster role memberships differ')).toBeGreaterThan(
+      committed,
+    );
+    expect(
+      (
+        await f.target.db.query(
+          `SELECT pg_has_role('${member}', '${parent}', 'MEMBER') AS allowed`,
+        )
+      ).rows,
+    ).toEqual([{ allowed: true }]);
+    expect(
+      (await f.target.db.query('SELECT count(*)::int AS count FROM auth.users')).rows,
+    ).toEqual([{ count: 1 }]);
+  });
+
+  it('restores ownership of an application schema that already exists', async () => {
+    const f = await fixture(undefined, async (source) => {
+      await source.db.query('ALTER SCHEMA public OWNER TO review');
+    });
+    await f.apply();
+    expect(
+      (
+        await f.target.db.query(
+          "SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname = 'public'",
+        )
+      ).rows,
+    ).toEqual([{ owner: 'review' }]);
+  });
+
+  it('replaces extra grants on an empty existing application schema', async () => {
+    const f = await fixture(undefined, async (source) => {
+      await source.db.query('REVOKE USAGE ON SCHEMA public FROM PUBLIC');
+    });
+    await f.target.db.query('GRANT CREATE ON SCHEMA public TO api_anon');
+    await f.apply();
+    expect(
+      (
+        await f.target.db.query(
+          "SELECT has_schema_privilege('api_anon', 'public', 'CREATE') OR has_schema_privilege('api_anon', 'public', 'USAGE') AS allowed",
+        )
+      ).rows,
+    ).toEqual([{ allowed: false }]);
+  });
+
+  it('keeps managed defaults on the target while restoring application default and object grants', async () => {
+    const f = await fixture(undefined, async (source) => {
+      await source.db.query(`
+        CREATE ROLE supabase_admin NOLOGIN;
+        CREATE ROLE recovery_operator NOLOGIN;
+        GRANT review TO recovery_operator;
+        ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT SELECT ON TABLES TO api_anon;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO api_anon;
+      `);
+    });
+    await f.target.db.query(`
+      ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT INSERT ON TABLES TO api_anon;
+    `);
+    const defaultsSql = `SELECT defaclacl::text FROM pg_default_acl WHERE defaclrole = 'supabase_admin'::regrole`;
+    const before = (await f.target.db.query(defaultsSql)).rows;
+    await f.target.db.query('SET ROLE recovery_operator');
+    try {
+      await expect(
+        f.target.db.query(
+          'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT SELECT ON TABLES TO api_anon',
+        ),
+      ).rejects.toThrow('permission denied to change default privileges');
+    } finally {
+      await f.target.db.query('RESET ROLE');
+    }
+    await f.apply({
+      async run(program, args, options) {
+        return runner.run(
+          program,
+          args,
+          program === 'psql'
+            ? {
+                ...options,
+                env: { ...options?.env, PGOPTIONS: '-c role=recovery_operator' },
+              }
+            : options,
+        );
+      },
+    });
+    expect((await f.target.db.query(defaultsSql)).rows).toEqual(before);
+    await f.target.db.query('CREATE TABLE public.future_table(id int)');
+    expect(
+      (
+        await f.target.db.query(`SELECT
+          has_table_privilege('api_anon', 'public.profiles', 'SELECT') AS existing,
+          has_table_privilege('api_anon', 'public.future_table', 'SELECT') AS future`)
+      ).rows,
+    ).toEqual([{ existing: true, future: true }]);
+  });
+
   it('explains a missing grant role, rolls back, and succeeds after the role is recreated', async () => {
     const role = `restore_role_${randomUUID().replaceAll('-', '')}`;
     const f = await fixture(undefined, async (source) => {
@@ -243,14 +436,87 @@ describe('PostgreSQL recovery safety', () => {
     await f.expectEmpty();
   });
 
-  it('rolls back if target default privileges would broaden application access', async () => {
+  it('restores exact application access despite target defaults, and preserves those defaults for future objects', async () => {
     const f = await fixture();
     await f.target.db.query(
-      'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO api_anon',
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO api_anon;
+       ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+       ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO api_anon WITH GRANT OPTION;
+       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO api_anon;
+       ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM PUBLIC;`,
     );
-    await expect(f.apply()).rejects.toThrow('ownership or privileges differ');
-    await f.expectEmpty();
+    const defaultsSql =
+      'SELECT defaclnamespace, defaclobjtype, defaclacl::text FROM pg_default_acl ORDER BY defaclnamespace, defaclobjtype';
+    const before = (await f.target.db.query(defaultsSql)).rows;
+    await f.apply();
+    expect((await f.target.db.query(defaultsSql)).rows).toEqual(before);
+    expect(
+      (
+        await f.target.db.query(
+          "SELECT has_function_privilege('api_anon', 'public.admin_only()', 'EXECUTE') AS allowed",
+        )
+      ).rows,
+    ).toEqual([{ allowed: false }]);
+    await f.target.db.query(
+      "CREATE FUNCTION public.future_function() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+    );
+    expect(
+      (
+        await f.target.db.query(
+          "SELECT has_function_privilege('api_anon', 'public.future_function()', 'EXECUTE') AS allowed",
+        )
+      ).rows,
+    ).toEqual([{ allowed: true }]);
   });
+
+  it.each([true, false])(
+    'still rolls back if restored application access differs (advisories enabled: %s)',
+    async (accessChecks) => {
+      const f = await fixture();
+      await f.target.db.query(`
+      GRANT CREATE ON SCHEMA public TO api_anon;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO api_anon;
+    `);
+      const defaultsSql = 'SELECT defaclacl::text FROM pg_default_acl';
+      const before = (await f.target.db.query(defaultsSql)).rows;
+      const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      await expect(
+        f.apply(
+          {
+            async run(program, args, options) {
+              if (program === 'psql') {
+                const appSql = args.find((arg) => arg.endsWith('app.sql'));
+                if (!appSql) throw new Error('Missing application SQL');
+                await appendFile(
+                  appSql,
+                  '\nGRANT EXECUTE ON FUNCTION public.admin_only() TO api_anon;\n',
+                );
+              }
+              return runner.run(program, args, options);
+            },
+          },
+          { accessChecks },
+        ),
+      ).rejects.toThrow('ownership or privileges differ');
+      const logs = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+      output.mockRestore();
+      expect(logs).toContain(
+        '[restore] Validating restored row counts, ownership, and privileges...',
+      );
+      expect(logs).not.toContain('Validation passed.');
+      expect(logs).not.toContain('committed successfully.');
+      expect(logs).not.toContain('Checking default privileges and role memberships');
+      await f.expectEmpty();
+      expect((await f.target.db.query(defaultsSql)).rows).toEqual(before);
+      expect(
+        (
+          await f.target.db.query(
+            "SELECT has_schema_privilege('api_anon', 'public', 'CREATE') AS allowed",
+          )
+        ).rows,
+      ).toEqual([{ allowed: true }]);
+    },
+  );
 
   it('detects corrupted archive bytes in both status and restore before any writes', async () => {
     const f = await fixture();

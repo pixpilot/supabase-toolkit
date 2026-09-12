@@ -1,3 +1,5 @@
+import type { AccessChecks } from './access-checks.js';
+import { isAccessChecks } from './access-checks.js';
 import { BackupError } from './errors.js';
 import { parseAppSchemas } from './validation.js';
 
@@ -14,6 +16,7 @@ export interface TableCount {
 
 export interface BackupManifest {
   formatVersion: 2;
+  accessChecks?: AccessChecks;
   appAccessFingerprint: string;
   appChecksumObjectKey: string;
   appEncryptedBytes: number;
@@ -73,6 +76,7 @@ export function parseManifest(value: string): BackupManifest {
   const item = manifest as Partial<BackupManifest>;
   if (
     item.formatVersion !== 2 ||
+    (item.accessChecks !== undefined && !isAccessChecks(item.accessChecks)) ||
     !isText(item.appAccessFingerprint) ||
     !/^[a-f0-9]{32}$/u.test(item.appAccessFingerprint || '') ||
     !isText(item.createdAt) ||

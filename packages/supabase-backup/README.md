@@ -163,8 +163,37 @@ Apply locks and rechecks the empty Auth tables, restores Auth rows, application
 objects, and Auth triggers, then validates counts and application ownership and
 privileges before committing. These steps run in one `psql --single-transaction`
 session with `ON_ERROR_STOP`: any SQL or validation failure rolls back the
-restore. It never drops existing objects. If target default privileges would
-change access, restore fails rather than committing those differences.
+restore. It never drops existing objects. Existing empty application schemas
+receive the archived ownership and grants. The restore role's target default
+privileges are temporarily suspended while objects are created, then reinstated
+before archived default privileges are replayed. This prevents target defaults
+from adding permissions to restored objects. Any remaining ownership or access
+mismatch still rolls back the entire restore, including the temporary changes.
+
+Restore keeps the target's default privileges for Supabase's internal
+`supabase_admin` role. Replaying these entries can fail with `permission denied
+to change default privileges` because the project login cannot alter that role's
+defaults. Application object grants, ownership, and other roles' default
+privileges are still restored and existing-object access is validated before
+commit. Review target defaults separately for objects created in the future.
+
+New backups also record optional fingerprints of configured default privileges
+(global and application-schema entries) and cluster-wide role memberships,
+including grantors and ADMIN/INHERIT/SET options. After a successful restore
+commits, the CLI reports whether these settings match the backup. Differences
+or unavailable checks produce advisory messages; they do not fail the restore
+or change memberships. Supabase-managed settings and unrelated cluster roles
+can intentionally differ, so review these messages in context.
+
+Advisory checks are enabled by default. Pass `restore --no-access-checks` to
+disable them, or use `{ accessChecks: false }` with the `restore()` API. If a
+check cannot run, the CLI explains this option. This flag only skips the new
+advisories; row-count and existing-object ownership/permission validation remain
+mandatory. Advisory mismatches never require retrying an already committed restore.
+
+Older backups remain supported and print that the advisory checks are skipped.
+Create a new backup to record the baseline. These checks compare catalog
+configuration, not passwords, all role attributes, or full application access.
 
 Verify existing-user login, new-user signup/profile creation, and an application
 workflow afterward. Check access as `anon` and `authenticated`, including
@@ -301,6 +330,7 @@ blocks.
 | `--max-age-hours <hours>`      | `status`  | Fail when the newest backup is older.                             |
 | `--key <manifest-key>`         | `restore` | Manifest to restore, ending in `.json`.                           |
 | `--apply`                      | `restore` | Write to the target database; omit for a dry run.                 |
+| `--no-access-checks`           | `restore` | Skip advisory default-grant and role-membership checks.           |
 | `--confirm-target <ref>`       | `restore` | Typed confirmation: project ref, else `<host>:<port>/<database>`. |
 | `--no-input`                   | all       | Never ask; fail when a value is missing.                          |
 | `-h`, `--help`                 | all       | Print the option list.                                            |

@@ -157,6 +157,31 @@ describe('configuration and safety', () => {
 });
 
 describe('backup records', () => {
+  it('accepts old manifests and validates the optional advisory baseline on new ones', () => {
+    const old = manifest();
+    const current = {
+      ...old,
+      accessChecks: {
+        version: 1,
+        defaultPrivilegesFingerprint: 'a'.repeat(32),
+        roleMembershipsFingerprint: 'b'.repeat(32),
+      },
+    } satisfies BackupManifest;
+    expect(parseManifest(JSON.stringify(old)).accessChecks).toBeUndefined();
+    expect(parseManifest(JSON.stringify(current))).toEqual(current);
+    for (const accessChecks of [
+      null,
+      {},
+      { ...current.accessChecks, version: 2 },
+      { ...current.accessChecks, defaultPrivilegesFingerprint: 'bad' },
+      { ...current.accessChecks, roleMembershipsFingerprint: false },
+    ]) {
+      expect(() => parseManifest(JSON.stringify({ ...old, accessChecks }))).toThrow(
+        'incomplete or invalid',
+      );
+    }
+  });
+
   it('rejects unsupported formats and malformed metadata before restoring', () => {
     const valid = manifest();
     const invalid: unknown[] = [

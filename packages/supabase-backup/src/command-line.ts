@@ -43,7 +43,13 @@ const valueOptions = new Set([
 ]);
 
 /** Options that are present or absent and never carry a value. */
-const switchOptions = new Set(['--apply', '--no-input', '--help', '-h']);
+const switchOptions = new Set([
+  '--apply',
+  '--no-input',
+  '--no-access-checks',
+  '--help',
+  '-h',
+]);
 
 export interface CliArguments {
   command: string;
@@ -74,6 +80,8 @@ Command options:
   --max-age-hours <hours>       Fail status when the newest backup is older.
   --key <manifest-key>          Manifest to restore.
   --apply                       Write to the target database.
+  --no-access-checks             Skip advisory default-grant and role-membership
+                                checks after restore (enabled by default).
   --confirm-target <ref>        Typed confirmation: the Supabase project ref,
                                 or '<host>:<port>/<database>' elsewhere.
   --no-input                    Never ask; fail when a value is missing.
@@ -111,6 +119,8 @@ export function parseArguments(args: readonly string[]): CliArguments {
     if (inline === undefined) index += 1;
     values.set(name, value);
   }
+  if (switches.has('--no-access-checks') && command !== 'restore')
+    throw new BackupError('--no-access-checks is only supported for restore.');
   return { command, values, switches };
 }
 
@@ -166,7 +176,12 @@ async function planRestore(
       );
     }
   }
-  const options = { key, apply, ...(confirmTarget ? { confirmTarget } : {}) };
+  const options = {
+    key,
+    apply,
+    accessChecks: !parsed.switches.has('--no-access-checks'),
+    ...(confirmTarget ? { confirmTarget } : {}),
+  };
   const resolved = values;
   return async () => restore(options, resolved);
 }
