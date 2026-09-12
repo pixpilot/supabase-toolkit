@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 3.5.0
+
+### Minor Changes
+
+- back up managed storage and discover schemas
+
 ## 3.4.0
 
 ### Minor Changes
