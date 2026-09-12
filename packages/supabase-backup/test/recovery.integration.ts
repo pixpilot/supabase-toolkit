@@ -1,15 +1,15 @@
-import type { BackupManifest } from '../src/manifest.js';
-import type { ProgramRunner } from '../src/process.js';
-import type { ObjectStore } from '../src/r2.js';
-import type { RestoreOptions } from '../src/restore.js';
+import type { BackupManifest } from '../src/core/manifest.js';
+import type { RestoreOptions } from '../src/restore/restore.js';
+import type { ObjectStore } from '../src/storage/object-store.js';
+import type { ProgramRunner } from '../src/utils/process.js';
 import { randomUUID } from 'node:crypto';
 import { appendFile, copyFile } from 'node:fs/promises';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { backupWithConfig } from '../src/backup.js';
-import { backupObjectKeys } from '../src/manifest.js';
-import { systemRunner } from '../src/process.js';
-import { restore } from '../src/restore.js';
-import { getBackupStatus } from '../src/status.js';
+import { backupWithConfig } from '../src/backup/backup.js';
+import { backupObjectKeys } from '../src/core/manifest.js';
+import { restore } from '../src/restore/restore.js';
+import { getBackupStatus } from '../src/status/status.js';
+import { systemRunner } from '../src/utils/process.js';
 import { recoveryDatabase } from './helpers/recovery-database.js';
 
 const first = '00000000-0000-0000-0000-000000000001';

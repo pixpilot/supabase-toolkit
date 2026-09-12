@@ -1,5 +1,5 @@
-import type { BackupManifest } from './manifest.js';
-import { applicationAccessSql } from './application-access.js';
+import type { BackupManifest } from '../core/manifest.js';
+import { applicationAccessSql } from '../db/application-access.js';
 
 /** Quotes values used in the generated validation SQL. */
 function literal(value: string): string {

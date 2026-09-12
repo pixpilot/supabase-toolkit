@@ -1,5 +1,5 @@
-import type { BackupManifest } from '../src/manifest.js';
-import type { ProgramRunner } from '../src/process.js';
+import type { BackupManifest } from '../src/core/manifest.js';
+import type { ProgramRunner } from '../src/utils/process.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,31 +10,39 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
 import {
+  loadBackupConfig,
+  loadRestoreConfig,
+  loadStatusConfig,
+} from '../src/core/config.js';
+import { BackupError } from '../src/core/errors.js';
+import { authTables, backupObjectKeys, parseManifest } from '../src/core/manifest.js';
+import {
   ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureSupportedAuthState,
   getAuthColumns,
-} from '../src/auth.js';
-import { loadBackupConfig, loadRestoreConfig, loadStatusConfig } from '../src/config.js';
+} from '../src/db/auth.js';
 import {
   databaseLabel,
   ensureDifferentDatabases,
   parseDatabaseUrl,
   toLibpqEnvironment,
-} from '../src/database-url.js';
-import { BackupError } from '../src/errors.js';
-import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from '../src/files.js';
-import { authTables, backupObjectKeys, parseManifest } from '../src/manifest.js';
+} from '../src/db/database-url.js';
 import {
   ensureDumpToolsCompatible,
   ensureRestoreToolSupportsArchive,
   parsePostgresMajor,
-} from '../src/postgres-tools.js';
-import { systemRunner } from '../src/process.js';
-import { r2ErrorDetails } from '../src/r2.js';
-import { redact } from '../src/redact.js';
-import { restore } from '../src/restore.js';
-import { getBackupStatus } from '../src/status.js';
+} from '../src/db/postgres-tools.js';
+import { restore } from '../src/restore/restore.js';
+import { getBackupStatus } from '../src/status/status.js';
+import { r2ErrorDetails } from '../src/storage/adapters/r2-store.js';
+import {
+  ensureNonEmptyFile,
+  sha256File,
+  withTemporaryDirectory,
+} from '../src/utils/files.js';
+import { systemRunner } from '../src/utils/process.js';
+import { redact } from '../src/utils/redact.js';
 
 const env = {
   SOURCE_DATABASE_URL:

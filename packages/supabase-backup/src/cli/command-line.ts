@@ -1,26 +1,31 @@
+import type { ObjectStore, StorageDriver } from '../storage/object-store.js';
 import type { InputValues } from './interactive.js';
 import type { Prompter, PromptStreams } from './prompt.js';
-import type { ObjectStore } from './r2.js';
-import { backup } from './backup.js';
-import { loadStatusConfig } from './config.js';
-import { BackupError } from './errors.js';
+import { backup } from '../backup/backup.js';
+import { loadStatusConfig } from '../core/config.js';
+import { BackupError } from '../core/errors.js';
+import { ensureValidManifestKey } from '../core/validation.js';
+import { restore } from '../restore/restore.js';
+import { status } from '../status/status.js';
+import {
+  createObjectStore,
+  hasStorageSettings,
+  readStorageDriver,
+  storageFields,
+} from '../storage/create-object-store.js';
 import {
   ageIdentityField,
   allFields,
-  backupFields,
+  backupFieldsFor,
   backupPrefixField,
   chooseManifestKey,
+  chooseStorageDriver,
   confirmRestoreTarget,
   fillMissingInput,
-  r2Fields,
-  statusFields,
+  statusFieldsFor,
   targetDatabaseUrlField,
 } from './interactive.js';
 import { createPrompter, interactiveStreams } from './prompt.js';
-import { R2Store } from './r2.js';
-import { restore } from './restore.js';
-import { status } from './status.js';
-import { ensureValidManifestKey } from './validation.js';
 
 /**
  * Command-line parsing and input resolution.
@@ -64,11 +69,15 @@ Commands:
   status     Verify the newest encrypted archives and their age.
   restore    Verify a backup, and write to a database only when asked.
 
+Storage options:
+  --storage <r2|local>          Where backups are kept. Default: r2.
+  --r2-endpoint <url>           r2: https://<account-id>.r2.cloudflarestorage.com
+  --r2-bucket <name>            r2: private bucket holding the backups.
+  --r2-access-key-id <id>       r2: access key ID.
+  --r2-secret-access-key <key>  r2: secret access key.
+  --storage-root <dir>          local: directory that holds the backups.
+
 Connection options:
-  --r2-endpoint <url>           https://<account-id>.r2.cloudflarestorage.com
-  --r2-bucket <name>            Private bucket holding the backups.
-  --r2-access-key-id <id>       R2 access key ID.
-  --r2-secret-access-key <key>  R2 secret access key.
   --source-database-url <url>   Database to back up.
   --target-database-url <url>   Database to restore into.
   --age-recipient <age1…>       Public recipient used to encrypt a backup.
@@ -86,6 +95,12 @@ Command options:
                                 or '<host>:<port>/<database>' elsewhere.
   --no-input                    Never ask; fail when a value is missing.
   -h, --help                    Show this help.
+
+Only the selected backend's storage options are required or asked for, so an
+--storage local run never asks for R2 credentials. Passing an option that belongs
+to one backend selects it, so --storage-root alone is enough to mean local. A
+terminal run that passes no storage option at all is offered the list to pick
+from, and one that names no command is offered the commands.
 
 The environment is never read. Anything not passed is asked for when the session
 is a terminal, so a missing --key offers the newest backups to choose from. A
@@ -134,14 +149,42 @@ export function inputFromArguments(parsed: CliArguments): InputValues {
   return values;
 }
 
+/** The commands offered when a session is asked which one to run. */
+const commands = ['backup', 'status', 'restore'] as const;
+
+/** Lists the commands and returns the one the operator picked. */
+async function chooseCommand(prompter: Prompter): Promise<string> {
+  const choice = await prompter.select('What do you want to do?', [
+    'backup — dump, encrypt, and upload one immutable backup folder',
+    'status — verify the newest encrypted archives and their age',
+    'restore — verify a backup, and write to a database only when asked',
+  ]);
+  return commands[choice] ?? '';
+}
+
+/**
+ * Names the backend to use, asking only when nothing else settles it.
+ *
+ * A run that passed --storage, or any setting belonging to one backend, has
+ * already answered the question and is not asked it again.
+ */
+async function resolveStorageDriver(
+  given: InputValues,
+  prompter: Prompter | undefined,
+): Promise<StorageDriver> {
+  if (prompter && !hasStorageSettings(given)) return chooseStorageDriver(prompter);
+  return readStorageDriver(given);
+}
+
 /** Resolves restore input, then returns the call that performs the restore. */
 async function planRestore(
   parsed: CliArguments,
   given: InputValues,
+  driver: StorageDriver,
   prompter: Prompter | undefined,
   dependencies: { store?: ObjectStore },
 ): Promise<() => Promise<unknown>> {
-  let values = await fillMissingInput(r2Fields, given, prompter);
+  let values = await fillMissingInput(storageFields(driver), given, prompter);
   let key = parsed.values.get('--key');
   if (key === undefined) {
     if (!prompter)
@@ -150,7 +193,7 @@ async function planRestore(
       );
     values = await fillMissingInput([backupPrefixField], values, prompter);
     const config = loadStatusConfig(values);
-    const store = dependencies.store || new R2Store(config);
+    const store = dependencies.store || createObjectStore(config);
     key = await chooseManifestKey(config.prefix, store, prompter);
   }
   ensureValidManifestKey(key);
@@ -192,18 +235,23 @@ export async function planCommand(
   prompter: Prompter | undefined,
   dependencies: { store?: ObjectStore } = {},
 ): Promise<() => Promise<unknown>> {
-  const given = inputFromArguments(parsed);
-  if (parsed.command === 'backup') {
-    const values = await fillMissingInput(backupFields, given, prompter);
+  const command =
+    parsed.command || (prompter ? await chooseCommand(prompter) : parsed.command);
+  const driver = await resolveStorageDriver(inputFromArguments(parsed), prompter);
+  // The chosen backend travels with the values, so loading the config later
+  // reads the settings of the backend this run actually selected.
+  const given: InputValues = { ...inputFromArguments(parsed), STORAGE_DRIVER: driver };
+  if (command === 'backup') {
+    const values = await fillMissingInput(backupFieldsFor(driver), given, prompter);
     return async () => backup(values);
   }
-  if (parsed.command === 'status') {
-    const values = await fillMissingInput(statusFields, given, prompter);
+  if (command === 'status') {
+    const values = await fillMissingInput(statusFieldsFor(driver), given, prompter);
     const raw = parsed.values.get('--max-age-hours');
     return async () => status(raw === undefined ? undefined : Number(raw), values);
   }
-  if (parsed.command === 'restore')
-    return planRestore(parsed, given, prompter, dependencies);
+  if (command === 'restore')
+    return planRestore(parsed, given, driver, prompter, dependencies);
   throw new BackupError(usage);
 }
 

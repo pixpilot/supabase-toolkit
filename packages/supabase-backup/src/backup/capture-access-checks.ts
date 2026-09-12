@@ -1,6 +1,6 @@
-import type { AccessChecks } from './access-checks.js';
-import type { Queryable } from './auth.js';
-import { accessChecksSql, isAccessChecks } from './access-checks.js';
+import type { AccessChecks } from '../core/access-checks.js';
+import type { Queryable } from '../db/auth.js';
+import { accessChecksSql, isAccessChecks } from '../core/access-checks.js';
 
 /** Captures advisory metadata within the backup snapshot; unavailable catalogs do not abort backup. */
 export async function captureAccessChecks(

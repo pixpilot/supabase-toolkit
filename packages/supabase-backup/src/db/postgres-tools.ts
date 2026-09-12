@@ -1,6 +1,6 @@
-import type { ProgramRunner } from './process.js';
+import type { ProgramRunner } from '../utils/process.js';
 
-import { BackupError } from './errors.js';
+import { BackupError } from '../core/errors.js';
 
 /**
  * Guards against PostgreSQL client programs that cannot handle the work asked of them.

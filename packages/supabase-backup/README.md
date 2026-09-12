@@ -315,12 +315,22 @@ explicitly, which is what an unattended run needs. `--no-input` makes that
 explicit: it fails on a missing value instead of asking, so a script never
 blocks.
 
+Storage options belong to the backend `--storage` selects. Only that backend's
+options are required or asked for, so a `--storage local` run is never asked for
+an R2 credential, and an R2 run is never asked for a directory. Passing an option
+that belongs to one backend selects it, so `--storage-root` on its own is enough
+to mean local. In a terminal, a run that passes no storage option is offered the
+list to pick from, and one that names no command is offered the commands — which
+is what a bare `supabase-backup` does.
+
 | Option                         | Commands  | Purpose                                                           |
 | ------------------------------ | --------- | ----------------------------------------------------------------- |
-| `--r2-endpoint <url>`          | all       | `https://<account-id>.r2.cloudflarestorage.com`.                  |
-| `--r2-bucket <name>`           | all       | Private bucket holding the backups.                               |
-| `--r2-access-key-id <id>`      | all       | R2 access key ID.                                                 |
-| `--r2-secret-access-key <key>` | all       | R2 secret access key.                                             |
+| `--storage <r2\|local>`        | all       | Where backups are kept. Default: `r2`.                            |
+| `--r2-endpoint <url>`          | all       | `r2`: `https://<account-id>.r2.cloudflarestorage.com`.            |
+| `--r2-bucket <name>`           | all       | `r2`: private bucket holding the backups.                         |
+| `--r2-access-key-id <id>`      | all       | `r2`: access key ID.                                              |
+| `--r2-secret-access-key <key>` | all       | `r2`: secret access key.                                          |
+| `--storage-root <dir>`         | all       | `local`: directory that holds the backups.                        |
 | `--source-database-url <url>`  | `backup`  | Database to back up.                                              |
 | `--age-recipient <age1…>`      | `backup`  | Public recipient used to encrypt.                                 |
 | `--age-identity <AGE-SECRET…>` | `restore` | Private identity used to decrypt.                                 |
@@ -340,6 +350,26 @@ personal or shared machine, leave `--r2-secret-access-key`, `--age-identity`,
 `--source-database-url`, and `--target-database-url` out and answer their hidden
 prompts instead; pass them as flags from a CI job, where the runner is yours
 alone and the values are masked in the log.
+
+## Storage backends
+
+`--storage r2` is the default and is what an off-site backup wants. Every
+command accepts `--storage local` instead, which reads and writes the same
+object layout under a directory:
+
+```bash
+npx @pixpilot/supabase-backup status \
+  --storage local \
+  --storage-root /mnt/backups/supabase \
+  --prefix 'production/database'
+```
+
+A local backup is written the same way an R2 one is: the same keys, the same age
+encryption, and the same refusal to overwrite a key that already exists. What it
+does not give you is distance from the database it came from, so treat a
+directory on the database host as a staging step or a drill target rather than
+as the copy you would restore from after losing that host. A mounted volume that
+fails independently is the case where it stands on its own.
 
 Backup, with every flag it accepts:
 

@@ -1,33 +1,38 @@
-import type { BackupManifest } from './manifest.js';
+import type { BackupManifest } from '../core/manifest.js';
 
-import type { ProgramRunner } from './process.js';
-import type { ObjectStore } from './r2.js';
+import type { ObjectStore } from '../storage/object-store.js';
+import type { ProgramRunner } from '../utils/process.js';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { loadRestoreConfig } from '../core/config.js';
+import { BackupError } from '../core/errors.js';
+import { parseManifest } from '../core/manifest.js';
+import { ensureValidManifestKey } from '../core/validation.js';
 import {
   connectForPreflight,
   ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
   getExistingSchemas,
-} from './auth.js';
-import { checkRestoreAccess } from './check-restore-access.js';
-import { loadRestoreConfig } from './config.js';
+} from '../db/auth.js';
 import {
   databaseLabel,
   ensureDifferentDatabases,
   parseDatabaseUrl,
   restoreTargetRef,
   toLibpqEnvironment,
-} from './database-url.js';
-import { BackupError } from './errors.js';
-import { ensureNonEmptyFile, withTemporaryDirectory, writePrivateFile } from './files.js';
+} from '../db/database-url.js';
+import { ensureRestoreToolSupportsArchive } from '../db/postgres-tools.js';
+import { createObjectStore } from '../storage/create-object-store.js';
+import { readVerifiedArchives } from '../storage/read-verified-archives.js';
+import {
+  ensureNonEmptyFile,
+  withTemporaryDirectory,
+  writePrivateFile,
+} from '../utils/files.js';
+import { systemRunner } from '../utils/process.js';
+import { checkRestoreAccess } from './check-restore-access.js';
 import { filterManagedDefaultPrivileges } from './filter-managed-default-privileges.js';
-import { parseManifest } from './manifest.js';
-import { ensureRestoreToolSupportsArchive } from './postgres-tools.js';
-import { systemRunner } from './process.js';
-import { R2Store } from './r2.js';
-import { readVerifiedArchives } from './read-verified-archives.js';
 import { resetExistingSchemaPrivilegesSql } from './reset-existing-schema-privileges.js';
 import {
   prepareRestoreDefaultsSql,
@@ -40,7 +45,6 @@ import {
   restoreValidationSql,
 } from './restore-sql.js';
 import { reuseExistingSchemas } from './reuse-existing-schemas.js';
-import { ensureValidManifestKey } from './validation.js';
 
 export interface RestoreOptions {
   apply: boolean;
@@ -209,7 +213,7 @@ export async function restore(
   );
   ensureValidManifestKey(options.key);
   const config = loadRestoreConfig(env, options.apply);
-  const store = dependencies.store || new R2Store(config);
+  const store = dependencies.store || createObjectStore(config);
   const runner = dependencies.runner || systemRunner;
   logRestoreProgress('Loading backup manifest...');
   const manifest = parseManifest(

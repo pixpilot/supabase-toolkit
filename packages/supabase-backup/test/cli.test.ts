@@ -1,18 +1,15 @@
-import type { CliArguments } from '../src/command-line.js';
-import type { InputValues } from '../src/interactive.js';
-import type { Prompter, TextPromptOptions } from '../src/prompt.js';
-import type { ObjectStore } from '../src/r2.js';
+import type { CliArguments } from '../src/cli/command-line.js';
+import type { InputValues } from '../src/cli/interactive.js';
+import type { Prompter, TextPromptOptions } from '../src/cli/prompt.js';
+import type { ObjectStore } from '../src/storage/object-store.js';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { preflightFailureMessage } from '../src/auth.js';
 import {
   inputFromArguments,
   parseArguments,
   planCommand,
   usage,
-} from '../src/command-line.js';
-import { parseDatabaseUrl, restoreTargetRef } from '../src/database-url.js';
-import { BackupError } from '../src/errors.js';
+} from '../src/cli/command-line.js';
 import {
   backupFields,
   chooseManifestKey,
@@ -22,15 +19,18 @@ import {
   fillMissingInput,
   r2Fields,
   statusFields,
-} from '../src/interactive.js';
-import { createPrompter, interactiveStreams, isInteractive } from '../src/prompt.js';
-import * as restoreModule from '../src/restore.js';
+} from '../src/cli/interactive.js';
+import { createPrompter, interactiveStreams, isInteractive } from '../src/cli/prompt.js';
+import { BackupError } from '../src/core/errors.js';
+import { preflightFailureMessage } from '../src/db/auth.js';
+import { parseDatabaseUrl, restoreTargetRef } from '../src/db/database-url.js';
+import * as restoreModule from '../src/restore/restore.js';
 import {
   appRestoreArguments,
   authRestoreArguments,
   filterExistingSchemas,
   restoreFollowUp,
-} from '../src/restore.js';
+} from '../src/restore/restore.js';
 
 /** The flags a fully specified run passes. */
 const connectionFlags: Record<string, string> = {
@@ -488,6 +488,62 @@ describe('planning a command', () => {
 
   it('reports usage for an unknown command', async () => {
     await expect(planCommand(args('rollback'), undefined)).rejects.toThrow('Usage:');
+  });
+
+  it('offers the storage backends when nothing else says which one to use', async () => {
+    const prompter = new StubPrompter(['/srv/backups'], [], [1]);
+    await planCommand(args('status'), prompter);
+    expect(prompter.offered).toEqual([
+      'r2 — Cloudflare R2 bucket over the S3 API.',
+      'local — A directory on this machine, or a mounted volume.',
+    ]);
+    expect(prompter.asked).toEqual([
+      'Where are the backups kept?',
+      'Directory that holds the backups',
+      'Backup object-key prefix',
+    ]);
+  });
+
+  it('asks the chosen backend own questions and no other backend questions', async () => {
+    const prompter = new StubPrompter(
+      ['https://account.r2.cloudflarestorage.com', 'private-backups', 'key', 'secret'],
+      [],
+      [0],
+    );
+    await planCommand(args('status'), prompter);
+    expect(prompter.asked).toEqual([
+      'Where are the backups kept?',
+      'R2 S3 endpoint (https://<account-id>.r2.cloudflarestorage.com)',
+      'R2 bucket name',
+      'R2 access key ID',
+      'R2 secret access key',
+      'Backup object-key prefix',
+    ]);
+  });
+
+  it('never asks which backend when a flag already settled it', async () => {
+    const named = new StubPrompter(['/srv/backups']);
+    await planCommand(args('status', { '--storage': 'local' }), named);
+    expect(named.asked).toEqual([
+      'Directory that holds the backups',
+      'Backup object-key prefix',
+    ]);
+
+    // A setting that belongs to one backend names it just as well.
+    const implied = new StubPrompter();
+    await planCommand(args('status', { '--storage-root': '/srv/backups' }), implied);
+    expect(implied.asked).toEqual(['Backup object-key prefix']);
+  });
+
+  it('offers the command list when a terminal run names no command', async () => {
+    const prompter = new StubPrompter(['/srv/backups'], [], [1, 1]);
+    const run = await planCommand(args(''), prompter);
+    expect(prompter.asked[0]).toBe('What do you want to do?');
+    expect(typeof run).toBe('function');
+  });
+
+  it('still reports usage for a missing command when it cannot ask', async () => {
+    await expect(planCommand(args(''), undefined)).rejects.toThrow('Usage:');
   });
 });
 

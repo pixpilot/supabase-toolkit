@@ -1,6 +1,6 @@
-import type { AccessChecks } from './access-checks.js';
-import type { Queryable } from './auth.js';
-import { accessChecksSql, isAccessChecks } from './access-checks.js';
+import type { AccessChecks } from '../core/access-checks.js';
+import type { Queryable } from '../db/auth.js';
+import { accessChecksSql, isAccessChecks } from '../core/access-checks.js';
 import { logRestoreProgress } from './restore-progress.js';
 
 /** Reports access configuration differences after commit without modifying roles or failing restore. */

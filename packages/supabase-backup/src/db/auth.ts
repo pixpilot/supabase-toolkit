@@ -1,10 +1,10 @@
-import type { DatabaseConnection } from './database-url.js';
+import type { AuthTable, Column, TableCount } from '../core/manifest.js';
 
-import type { AuthTable, Column, TableCount } from './manifest.js';
+import type { DatabaseConnection } from './database-url.js';
 import { Client } from 'pg';
+import { BackupError } from '../core/errors.js';
+import { redact } from '../utils/redact.js';
 import { databaseLabel } from './database-url.js';
-import { BackupError } from './errors.js';
-import { redact } from './redact.js';
 
 export interface Queryable {
   query: <T extends Record<string, unknown>>(sql: string) => Promise<{ rows: T[] }>;

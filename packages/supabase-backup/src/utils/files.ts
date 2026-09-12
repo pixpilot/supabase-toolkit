@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { BackupError } from './errors.js';
+import { BackupError } from '../core/errors.js';
 
 /** Creates a private temporary directory and always removes it after the callback. */
 export async function withTemporaryDirectory<T>(

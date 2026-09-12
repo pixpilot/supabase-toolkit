@@ -1,19 +1,28 @@
+import type { InputField, InputValues } from '../core/input.js';
+import type { ObjectStore, StorageDriver } from '../storage/object-store.js';
 import type { Prompter } from './prompt.js';
-import type { ObjectStore } from './r2.js';
-import { databaseLabel, parseDatabaseUrl, restoreTargetRef } from './database-url.js';
-import { BackupError } from './errors.js';
-import { backupKeyLayoutVersion, manifestObjectName } from './manifest.js';
-import { listManifestKeys } from './status.js';
+import { BackupError } from '../core/errors.js';
+import { backupKeyLayoutVersion, manifestObjectName } from '../core/manifest.js';
 import {
-  ensureOpaqueSecret,
   ensureValidAgeIdentity,
   ensureValidAgeRecipient,
   ensureValidBackupPrefix,
   ensureValidManifestKey,
-  ensureValidR2Bucket,
-  ensureValidR2Endpoint,
   parseAppSchemas,
-} from './validation.js';
+} from '../core/validation.js';
+import { databaseLabel, parseDatabaseUrl, restoreTargetRef } from '../db/database-url.js';
+import { listManifestKeys } from '../status/status.js';
+import { storageAdapters } from '../storage/adapters/index.js';
+import {
+  allStorageFields,
+  defaultStorageDriver,
+  storageFields,
+} from '../storage/create-object-store.js';
+import { storageDrivers } from '../storage/object-store.js';
+
+export type { InputField, InputValues } from '../core/input.js';
+/** R2 credentials and location, kept here as the name earlier releases exported. */
+export { r2Fields } from '../storage/adapters/r2-store.js';
 
 /**
  * Resolves the values a command needs but was not given.
@@ -23,18 +32,6 @@ import {
  * only way to keep a secret out of the process arguments, where it is visible to
  * other processes and is kept in shell history.
  */
-
-export interface InputField {
-  defaultValue?: string;
-  flag: string;
-  name: string;
-  question: string;
-  secret?: boolean;
-  validate?: (value: string) => void;
-}
-
-/** Values a command was given or asked for, keyed by configuration name. */
-export type InputValues = Record<string, string | undefined>;
 
 /** Backups listed before the manual-entry choice when picking a restore. */
 const maximumListedBackups = 10;
@@ -96,56 +93,45 @@ export const appSchemasField: InputField = {
   },
 };
 
-/** R2 credentials and location, shared by every command. */
-export const r2Fields: readonly InputField[] = [
-  {
-    flag: '--r2-endpoint',
-    name: 'R2_ENDPOINT',
-    question: 'R2 S3 endpoint (https://<account-id>.r2.cloudflarestorage.com)',
-    validate: ensureValidR2Endpoint,
-  },
-  {
-    flag: '--r2-bucket',
-    name: 'R2_BUCKET',
-    question: 'R2 bucket name',
-    validate: ensureValidR2Bucket,
-  },
-  {
-    flag: '--r2-access-key-id',
-    name: 'R2_ACCESS_KEY_ID',
-    question: 'R2 access key ID',
-    secret: true,
-    validate: (value: string): void => ensureOpaqueSecret('--r2-access-key-id', value),
-  },
-  {
-    flag: '--r2-secret-access-key',
-    name: 'R2_SECRET_ACCESS_KEY',
-    question: 'R2 secret access key',
-    secret: true,
-    validate: (value: string): void =>
-      ensureOpaqueSecret('--r2-secret-access-key', value),
-  },
-];
+/**
+ * Everything `backup` reads, in the order an operator is asked for it.
+ *
+ * The storage settings come from the selected backend rather than from a fixed
+ * list, so a run is only ever asked for the ones that backend uses.
+ */
+export function backupFieldsFor(driver: StorageDriver): readonly InputField[] {
+  return [
+    sourceDatabaseUrlField,
+    ageRecipientField,
+    ...storageFields(driver),
+    backupPrefixField,
+    appSchemasField,
+  ];
+}
 
-/** Everything `backup` reads, in the order an operator is asked for it. */
-export const backupFields: readonly InputField[] = [
-  sourceDatabaseUrlField,
-  ageRecipientField,
-  ...r2Fields,
-  backupPrefixField,
-  appSchemasField,
-];
+/** Everything the read-only health check reads from the selected backend. */
+export function statusFieldsFor(driver: StorageDriver): readonly InputField[] {
+  return [...storageFields(driver), backupPrefixField];
+}
 
-/** Everything the read-only health check reads. */
-export const statusFields: readonly InputField[] = [...r2Fields, backupPrefixField];
+/** Everything `backup` reads on the default R2 backend. */
+export const backupFields: readonly InputField[] = backupFieldsFor('r2');
 
-/** Every field any command accepts, which defines the value flags the CLI parses. */
+/** Everything the read-only health check reads on the default R2 backend. */
+export const statusFields: readonly InputField[] = statusFieldsFor('r2');
+
+/**
+ * Every field any command accepts, which defines the value flags the CLI parses.
+ *
+ * Every backend's flags are parsed, whichever one a run selects; only the
+ * selected backend's are ever required or asked for.
+ */
 export const allFields: readonly InputField[] = [
   sourceDatabaseUrlField,
   targetDatabaseUrlField,
   ageRecipientField,
   ageIdentityField,
-  ...r2Fields,
+  ...allStorageFields,
   backupPrefixField,
   appSchemasField,
 ];
@@ -203,6 +189,20 @@ export function describeBackupKey(key: string, now = new Date()): string {
   const age = now.getTime() - created.getTime();
   if (!Number.isFinite(age) || age < 0) return stamp;
   return `${year}-${month}-${day} ${hour}:${minute} UTC  (${ageLabel(age)})  ${stamp}`;
+}
+
+/**
+ * Lists the storage backends and returns the one the operator picked.
+ *
+ * Only reached when nothing else settled the question: a run that named a
+ * backend, or gave settings that belong to one, is never asked.
+ */
+export async function chooseStorageDriver(prompter: Prompter): Promise<StorageDriver> {
+  const choice = await prompter.select(
+    'Where are the backups kept?',
+    storageDrivers.map((driver) => `${driver} — ${storageAdapters[driver].summary}`),
+  );
+  return storageDrivers[choice] ?? defaultStorageDriver;
 }
 
 /** Lists the newest backups and returns the manifest key the operator picked. */

@@ -1,7 +1,7 @@
 import type { Interface as PromiseInterface } from 'node:readline/promises';
 import { createInterface } from 'node:readline/promises';
-import { BackupError } from './errors.js';
-import { redact } from './redact.js';
+import { BackupError } from '../core/errors.js';
+import { redact } from '../utils/redact.js';
 
 /**
  * Interactive input built on node:readline/promises.

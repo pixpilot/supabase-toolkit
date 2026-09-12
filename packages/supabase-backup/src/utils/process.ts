@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 
-import { BackupError } from './errors.js';
+import { BackupError } from '../core/errors.js';
 import { redact } from './redact.js';
 
 /** Caps how much subprocess stderr is kept so a failure message stays readable. */

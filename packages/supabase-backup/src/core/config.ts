@@ -1,57 +1,36 @@
+import type { StorageConfig } from '../storage/create-object-store.js';
+import { loadStorageConfig } from '../storage/create-object-store.js';
+import { required } from './env.js';
 import { BackupError } from './errors.js';
 import {
-  ensureOpaqueSecret,
   ensureValidAgeIdentity,
   ensureValidAgeRecipient,
   ensureValidBackupPrefix,
-  ensureValidR2Bucket,
-  ensureValidR2Endpoint,
   parseAppSchemas,
 } from './validation.js';
 
-export interface R2Config {
-  accessKeyId: string;
-  bucket: string;
-  endpoint: string;
-  secretAccessKey: string;
-}
+/*
+ * Storage settings are not listed here. Each backend owns its own, so this file
+ * carries whatever the selected adapter loaded without naming R2, a directory,
+ * or anything else specific to one of them.
+ */
 
-export interface BackupConfig extends R2Config {
+export type BackupConfig = StorageConfig & {
   ageRecipient: string;
   appSchemas: string[];
   prefix: string;
   sourceDatabaseUrl: string;
-}
+};
 
-export interface RestoreConfig extends R2Config {
+export type RestoreConfig = StorageConfig & {
   ageIdentity: string;
   sourceDatabaseUrl?: string;
   targetDatabaseUrl?: string;
-}
+};
 
-export interface StatusConfig extends R2Config {
+export type StatusConfig = StorageConfig & {
   prefix: string;
-}
-
-function required(env: NodeJS.ProcessEnv, name: string): string {
-  const value = env[name]?.trim();
-  if (!value) throw new BackupError(`${name} is required.`);
-  return value;
-}
-
-function r2Config(env: NodeJS.ProcessEnv): R2Config {
-  const config = {
-    accessKeyId: required(env, 'R2_ACCESS_KEY_ID'),
-    secretAccessKey: required(env, 'R2_SECRET_ACCESS_KEY'),
-    endpoint: required(env, 'R2_ENDPOINT'),
-    bucket: required(env, 'R2_BUCKET'),
-  };
-  ensureOpaqueSecret('R2_ACCESS_KEY_ID', config.accessKeyId);
-  ensureOpaqueSecret('R2_SECRET_ACCESS_KEY', config.secretAccessKey);
-  ensureValidR2Endpoint(config.endpoint);
-  ensureValidR2Bucket(config.bucket);
-  return config;
-}
+};
 
 /** Reads, normalises, and validates an object-key prefix. */
 function backupPrefix(env: NodeJS.ProcessEnv): string {
@@ -66,7 +45,7 @@ export function loadBackupConfig(env = process.env): BackupConfig {
   const ageRecipient = required(env, 'BACKUP_AGE_RECIPIENT');
   ensureValidAgeRecipient(ageRecipient);
   return {
-    ...r2Config(env),
+    ...loadStorageConfig(env),
     ageRecipient,
     sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL'),
     prefix: backupPrefix(env),
@@ -85,7 +64,7 @@ export function loadRestoreConfig(
   const ageIdentity = required(env, 'AGE_IDENTITY');
   ensureValidAgeIdentity(ageIdentity);
   return {
-    ...r2Config(env),
+    ...loadStorageConfig(env),
     ageIdentity,
     ...(targetDatabaseUrl ? { targetDatabaseUrl } : {}),
     ...(env['SOURCE_DATABASE_URL']?.trim()
@@ -94,7 +73,7 @@ export function loadRestoreConfig(
   };
 }
 
-/** Loads the R2 prefix and credentials required by the read-only health check. */
+/** Loads the object-key prefix and storage settings the health check reads. */
 export function loadStatusConfig(env = process.env): StatusConfig {
-  return { ...r2Config(env), prefix: backupPrefix(env) };
+  return { ...loadStorageConfig(env), prefix: backupPrefix(env) };
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { runCli } from './command-line.js';
-import { redact } from './redact.js';
+import { runCli } from './cli/command-line.js';
+import { redact } from './utils/redact.js';
 
 runCli().catch((error: unknown) => {
   process.stderr.write(

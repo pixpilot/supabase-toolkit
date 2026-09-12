@@ -1,4 +1,4 @@
-import { redact } from './redact.js';
+import { redact } from '../utils/redact.js';
 
 interface RestoreStep {
   message: string;

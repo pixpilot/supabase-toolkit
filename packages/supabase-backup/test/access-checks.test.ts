@@ -1,10 +1,10 @@
-import type { AccessChecks } from '../src/access-checks.js';
-import type { Queryable } from '../src/auth.js';
+import type { AccessChecks } from '../src/core/access-checks.js';
+import type { Queryable } from '../src/db/auth.js';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { accessChecksSql } from '../src/access-checks.js';
-import { captureAccessChecks } from '../src/capture-access-checks.js';
-import { checkRestoreAccess } from '../src/check-restore-access.js';
+import { captureAccessChecks } from '../src/backup/capture-access-checks.js';
+import { accessChecksSql } from '../src/core/access-checks.js';
+import { checkRestoreAccess } from '../src/restore/check-restore-access.js';
 
 afterEach(() => vi.restoreAllMocks());
 

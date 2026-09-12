@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { systemRunner } from '../src/process.js';
-import { createRestoreProgress, logRestoreProgress } from '../src/restore-progress.js';
+import {
+  createRestoreProgress,
+  logRestoreProgress,
+} from '../src/restore/restore-progress.js';
+import { systemRunner } from '../src/utils/process.js';
 
 afterEach(() => vi.restoreAllMocks());
 

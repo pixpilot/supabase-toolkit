@@ -1,4 +1,5 @@
-import type { R2Config } from './config.js';
+import type { InputField } from '../../core/input.js';
+import type { ObjectStore, StorageAdapter, StorageSettings } from '../object-store.js';
 
 import {
   GetObjectCommand,
@@ -7,14 +8,52 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { BackupError } from './errors.js';
+import { required } from '../../core/env.js';
+import { BackupError } from '../../core/errors.js';
+import {
+  ensureOpaqueSecret,
+  ensureValidR2Bucket,
+  ensureValidR2Endpoint,
+} from '../../core/validation.js';
 
-export interface ObjectStore {
-  get: (key: string) => Promise<Uint8Array>;
-  has: (key: string) => Promise<boolean>;
-  list: (prefix: string) => Promise<string[]>;
-  putImmutable: (key: string, body: Uint8Array) => Promise<void>;
+export interface R2Config extends StorageSettings {
+  accessKeyId: string;
+  bucket: string;
+  driver?: 'r2';
+  endpoint: string;
+  secretAccessKey: string;
 }
+
+/** R2 credentials and location, asked for only when this backend is selected. */
+export const r2Fields: readonly InputField[] = [
+  {
+    flag: '--r2-endpoint',
+    name: 'R2_ENDPOINT',
+    question: 'R2 S3 endpoint (https://<account-id>.r2.cloudflarestorage.com)',
+    validate: ensureValidR2Endpoint,
+  },
+  {
+    flag: '--r2-bucket',
+    name: 'R2_BUCKET',
+    question: 'R2 bucket name',
+    validate: ensureValidR2Bucket,
+  },
+  {
+    flag: '--r2-access-key-id',
+    name: 'R2_ACCESS_KEY_ID',
+    question: 'R2 access key ID',
+    secret: true,
+    validate: (value: string): void => ensureOpaqueSecret('--r2-access-key-id', value),
+  },
+  {
+    flag: '--r2-secret-access-key',
+    name: 'R2_SECRET_ACCESS_KEY',
+    question: 'R2 secret access key',
+    secret: true,
+    validate: (value: string): void =>
+      ensureOpaqueSecret('--r2-secret-access-key', value),
+  },
+];
 
 /** Formats safe S3 error metadata for actionable R2 CLI diagnostics. */
 export function r2ErrorDetails(error: unknown): string {
@@ -34,6 +73,21 @@ export function r2ErrorDetails(error: unknown): string {
     typeof requestId === 'string' && `requestId=${requestId}`,
   ].filter(Boolean);
   return values.length ? ` [${values.join(', ')}]` : '';
+}
+
+/** Reads and checks the R2 credentials and location. */
+export function loadR2Config(env: NodeJS.ProcessEnv): R2Config {
+  const config = {
+    accessKeyId: required(env, 'R2_ACCESS_KEY_ID'),
+    secretAccessKey: required(env, 'R2_SECRET_ACCESS_KEY'),
+    endpoint: required(env, 'R2_ENDPOINT'),
+    bucket: required(env, 'R2_BUCKET'),
+  };
+  ensureOpaqueSecret('R2_ACCESS_KEY_ID', config.accessKeyId);
+  ensureOpaqueSecret('R2_SECRET_ACCESS_KEY', config.secretAccessKey);
+  ensureValidR2Endpoint(config.endpoint);
+  ensureValidR2Bucket(config.bucket);
+  return { ...config, driver: 'r2' };
 }
 
 /** R2 object store using S3-compatible, path-style requests. */
@@ -118,3 +172,12 @@ export class R2Store implements ObjectStore {
     }
   }
 }
+
+/** Cloudflare R2, the default backend. */
+export const r2Adapter: StorageAdapter<R2Config> = {
+  driver: 'r2',
+  summary: 'Cloudflare R2 bucket over the S3 API.',
+  fields: r2Fields,
+  loadConfig: loadR2Config,
+  createStore: (config: R2Config): ObjectStore => new R2Store(config),
+};

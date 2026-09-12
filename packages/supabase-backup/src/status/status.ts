@@ -1,10 +1,14 @@
-import type { BackupManifest } from './manifest.js';
-import type { ObjectStore } from './r2.js';
-import { loadStatusConfig } from './config.js';
-import { BackupError } from './errors.js';
-import { backupKeyLayoutVersion, manifestObjectName, parseManifest } from './manifest.js';
-import { R2Store } from './r2.js';
-import { readVerifiedArchives } from './read-verified-archives.js';
+import type { BackupManifest } from '../core/manifest.js';
+import type { ObjectStore } from '../storage/object-store.js';
+import { loadStatusConfig } from '../core/config.js';
+import { BackupError } from '../core/errors.js';
+import {
+  backupKeyLayoutVersion,
+  manifestObjectName,
+  parseManifest,
+} from '../core/manifest.js';
+import { createObjectStore } from '../storage/create-object-store.js';
+import { readVerifiedArchives } from '../storage/read-verified-archives.js';
 
 export interface BackupStatus {
   ageHours: number;
@@ -60,7 +64,7 @@ export async function status(
   if (maxAgeHours !== undefined && (!Number.isFinite(maxAgeHours) || maxAgeHours < 0))
     throw new BackupError('--max-age-hours must be a non-negative number.');
   const config = loadStatusConfig(env);
-  const result = await getBackupStatus(config.prefix, new R2Store(config));
+  const result = await getBackupStatus(config.prefix, createObjectStore(config));
   if (maxAgeHours !== undefined && result.ageHours > maxAgeHours)
     throw new BackupError(
       `Latest backup is ${result.ageHours.toFixed(1)} hours old, exceeding ${maxAgeHours} hours.`,

@@ -1,19 +1,23 @@
-import type { BackupConfig } from './config.js';
-import type { BackupManifest } from './manifest.js';
+import type { BackupConfig } from '../core/config.js';
+import type { BackupManifest } from '../core/manifest.js';
 
-import type { ProgramRunner } from './process.js';
-import type { ObjectStore } from './r2.js';
+import type { ObjectStore } from '../storage/object-store.js';
+import type { ProgramRunner } from '../utils/process.js';
 import { readFile, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import packageJson from '../package.json' with { type: 'json' };
-import { loadBackupConfig } from './config.js';
+import packageJson from '../../package.json' with { type: 'json' };
+import { loadBackupConfig } from '../core/config.js';
+import { BackupError } from '../core/errors.js';
+import { authTables, backupObjectKeys } from '../core/manifest.js';
+import { createObjectStore } from '../storage/create-object-store.js';
+import { readVerifiedArchives } from '../storage/read-verified-archives.js';
+import {
+  ensureNonEmptyFile,
+  sha256File,
+  withTemporaryDirectory,
+} from '../utils/files.js';
+import { systemRunner } from '../utils/process.js';
 import { dumpDatabase } from './dump-database.js';
-import { BackupError } from './errors.js';
-import { ensureNonEmptyFile, sha256File, withTemporaryDirectory } from './files.js';
-import { authTables, backupObjectKeys } from './manifest.js';
-import { systemRunner } from './process.js';
-import { R2Store } from './r2.js';
-import { readVerifiedArchives } from './read-verified-archives.js';
 
 /** Creates encrypted, immutable app/Auth archives and publishes their manifest last. */
 export async function backup(
@@ -30,12 +34,12 @@ export async function backupWithConfig(
   dependencies: { now?: Date; runner?: ProgramRunner; store?: ObjectStore } = {},
 ): Promise<BackupManifest> {
   const runner = dependencies.runner || systemRunner;
-  const store = dependencies.store || new R2Store(config);
+  const store = dependencies.store || createObjectStore(config);
   const createdAt = dependencies.now || new Date();
   const keys = backupObjectKeys(config.prefix, createdAt);
   for (const key of Object.values(keys))
     if (await store.has(key))
-      throw new BackupError(`Refusing to overwrite existing R2 object '${key}'.`);
+      throw new BackupError(`Refusing to overwrite existing object '${key}'.`);
   return withTemporaryDirectory(async (directory) => {
     const appDump = join(directory, 'app.dump');
     const authDump = join(directory, 'auth.dump');

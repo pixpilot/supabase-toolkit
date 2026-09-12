@@ -1,8 +1,8 @@
 /* eslint-disable ts/explicit-module-boundary-types */
-import type { BackupManifest } from './manifest.js';
-import type { ObjectStore } from './r2.js';
+import type { BackupManifest } from '../core/manifest.js';
+import type { ObjectStore } from './object-store.js';
 import { createHash } from 'node:crypto';
-import { BackupError } from './errors.js';
+import { BackupError } from '../core/errors.js';
 
 /** Downloads both archives and checks their lengths and SHA-256 digests before use. */
 export async function readVerifiedArchives(manifest: BackupManifest, store: ObjectStore) {

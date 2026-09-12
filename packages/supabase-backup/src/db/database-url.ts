@@ -1,5 +1,5 @@
-import { BackupError } from './errors.js';
-import { ensureNoTemplatePlaceholder } from './validation.js';
+import { BackupError } from '../core/errors.js';
+import { ensureNoTemplatePlaceholder } from '../core/validation.js';
 
 export interface DatabaseConnection {
   database: string;

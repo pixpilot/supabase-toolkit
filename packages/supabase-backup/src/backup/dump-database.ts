@@ -1,19 +1,19 @@
 /* eslint-disable ts/explicit-module-boundary-types */
-import type { BackupConfig } from './config.js';
-import type { ProgramRunner } from './process.js';
-import { applicationAccessSql } from './application-access.js';
+import type { BackupConfig } from '../core/config.js';
+import type { ProgramRunner } from '../utils/process.js';
+import { BackupError } from '../core/errors.js';
+import { authTables } from '../core/manifest.js';
+import { applicationAccessSql } from '../db/application-access.js';
 import {
   connectForPreflight,
   ensureSupportedAuthState,
   getApplicationTables,
   getAuthColumns,
   getTableCounts,
-} from './auth.js';
+} from '../db/auth.js';
+import { parseDatabaseUrl, toLibpqEnvironment } from '../db/database-url.js';
+import { ensureDumpToolsCompatible } from '../db/postgres-tools.js';
 import { captureAccessChecks } from './capture-access-checks.js';
-import { parseDatabaseUrl, toLibpqEnvironment } from './database-url.js';
-import { BackupError } from './errors.js';
-import { authTables } from './manifest.js';
-import { ensureDumpToolsCompatible } from './postgres-tools.js';
 
 /** Captures metadata and both archives from one exported, read-only snapshot. */
 export async function dumpDatabase(

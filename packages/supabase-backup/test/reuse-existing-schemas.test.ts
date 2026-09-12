@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reuseExistingSchemas } from '../src/reuse-existing-schemas.js';
+import { reuseExistingSchemas } from '../src/restore/reuse-existing-schemas.js';
 
 describe('reusing existing schemas', () => {
   it('preserves ownership and quoting while making only existing schema creation idempotent', () => {

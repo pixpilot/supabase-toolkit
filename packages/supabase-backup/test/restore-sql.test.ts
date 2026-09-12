@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authTriggerList } from '../src/restore-sql.js';
+import { authTriggerList } from '../src/restore/restore-sql.js';
 
 describe('auth trigger archive selection', () => {
   it('restores trigger definitions without replacing managed Auth tables or constraints', () => {

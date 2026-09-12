@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterManagedDefaultPrivileges } from '../src/filter-managed-default-privileges.js';
+import { filterManagedDefaultPrivileges } from '../src/restore/filter-managed-default-privileges.js';
 
 describe('managed default privileges', () => {
   it('skips only default ACL entries owned by supabase_admin', () => {
