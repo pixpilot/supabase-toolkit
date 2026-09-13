@@ -1,6 +1,5 @@
 import type { BackupManifest } from '../src/core/manifest.js';
 import type { RestoreOptions } from '../src/restore/restore.js';
-import type { ObjectStore } from '../src/storage/object-store.js';
 import type { ProgramRunner } from '../src/utils/process.js';
 import { randomUUID } from 'node:crypto';
 import { appendFile, copyFile } from 'node:fs/promises';
@@ -10,6 +9,7 @@ import { backupObjectKeys } from '../src/core/manifest.js';
 import { restore } from '../src/restore/restore.js';
 import { getBackupStatus } from '../src/status/status.js';
 import { systemRunner } from '../src/utils/process.js';
+import { MemoryStore } from './helpers/memory-store.js';
 import { recoveryDatabase } from './helpers/recovery-database.js';
 
 const first = '00000000-0000-0000-0000-000000000001';
@@ -31,28 +31,6 @@ CREATE TABLE public.records(id bigserial PRIMARY KEY, payload jsonb, amount nume
 INSERT INTO public.records(payload, amount, bytes, instant) VALUES ('{"text":"Unicode 雪", "nested":[null,true]}', 12345678901234567890.12345678, decode('00ff01', 'hex'), '2026-01-01T03:15:00+03:00');
 INSERT INTO auth.users VALUES ('${first}', 'old@example.test');
 INSERT INTO auth.identities VALUES ('${first}', '${first}');`;
-
-class MemoryStore implements ObjectStore {
-  public readonly values = new Map<string, Uint8Array>();
-  public async get(key: string): Promise<Uint8Array> {
-    const value = this.values.get(key);
-    if (!value) throw new Error(`Missing object ${key}`);
-    return value;
-  }
-
-  public async has(key: string): Promise<boolean> {
-    return this.values.has(key);
-  }
-
-  public async list(prefix: string): Promise<string[]> {
-    return [...this.values.keys()].filter((key) => key.startsWith(prefix));
-  }
-
-  public async putImmutable(key: string, data: Uint8Array): Promise<void> {
-    if (this.values.has(key)) throw new Error('Object already exists');
-    this.values.set(key, data);
-  }
-}
 
 // Only age and R2 are substitutes. All dumps, restores, snapshots and transactions use PostgreSQL.
 const runner: ProgramRunner = {

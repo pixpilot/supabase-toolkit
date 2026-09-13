@@ -3,7 +3,7 @@ import type { BackupManifest } from '../core/manifest.js';
 
 import type { ObjectStore } from '../storage/object-store.js';
 import type { ProgramRunner } from '../utils/process.js';
-import { readFile, stat, unlink } from 'node:fs/promises';
+import { stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import packageJson from '../../package.json' with { type: 'json' };
 import { loadBackupConfig } from '../core/config.js';
@@ -88,8 +88,8 @@ export async function backupWithConfig(
       authTables: [...authTables],
       cliVersion: packageJson.version,
     };
-    await store.putImmutable(keys.app, await readFile(appEncrypted));
-    await store.putImmutable(keys.auth, await readFile(authEncrypted));
+    await store.putImmutable(keys.app, { file: appEncrypted });
+    await store.putImmutable(keys.auth, { file: authEncrypted });
     await store.putImmutable(
       keys.appChecksum,
       Buffer.from(`${appSha256}  ${keys.app.split('/').at(-1)}\n`),

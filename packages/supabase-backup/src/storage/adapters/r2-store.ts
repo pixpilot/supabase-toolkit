@@ -1,13 +1,20 @@
+import type { Readable } from 'node:stream';
 import type { InputField } from '../../core/input.js';
-import type { ObjectStore, StorageAdapter, StorageSettings } from '../object-store.js';
+import type {
+  ObjectBody,
+  ObjectStore,
+  StorageAdapter,
+  StorageSettings,
+} from '../object-store.js';
 
+import { createReadStream } from 'node:fs';
 import {
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
-  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { required } from '../../core/env.js';
 import { BackupError } from '../../core/errors.js';
 import {
@@ -121,18 +128,32 @@ export class R2Store implements ObjectStore {
     }
   }
 
-  public async putImmutable(key: string, body: Uint8Array): Promise<void> {
+  /**
+   * Stores an object, sending an archive in parts rather than in one request.
+   *
+   * `Upload` sends a small body as a single request, which is every checksum and
+   * manifest, and switches to a multipart upload for anything larger. That is
+   * what lifts the ceiling: one request may carry at most 5 GiB, and the bytes
+   * would have to be held in memory to build it.
+   *
+   * `IfNoneMatch` makes the single-request path refuse an existing key outright.
+   * A multipart upload has no such condition, so a large archive rests on the
+   * check above, on keys that carry the run's own timestamp, and on the caller
+   * confirming every object afterwards.
+   */
+  public async putImmutable(key: string, body: ObjectBody): Promise<void> {
     if (await this.has(key))
       throw new BackupError(`Refusing to overwrite existing R2 object '${key}'.`);
     try {
-      await this.client.send(
-        new PutObjectCommand({
+      await new Upload({
+        client: this.client,
+        params: {
           Bucket: this.config.bucket,
           Key: key,
-          Body: body,
-          IfNoneMatch: '*',
-        }),
-      );
+          Body: body instanceof Uint8Array ? body : createReadStream(body.file),
+          ...(body instanceof Uint8Array ? { IfNoneMatch: '*' } : {}),
+        },
+      }).done();
     } catch (error: unknown) {
       throw new BackupError(`R2 upload failed for '${key}'${r2ErrorDetails(error)}.`);
     }
@@ -144,6 +165,17 @@ export class R2Store implements ObjectStore {
         new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
       );
       return await output.Body!.transformToByteArray();
+    } catch (error: unknown) {
+      throw new BackupError(`R2 download failed for '${key}'${r2ErrorDetails(error)}.`);
+    }
+  }
+
+  public async getStream(key: string): Promise<Readable> {
+    try {
+      const output = await this.client.send(
+        new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+      );
+      return output.Body as Readable;
     } catch (error: unknown) {
       throw new BackupError(`R2 download failed for '${key}'${r2ErrorDetails(error)}.`);
     }

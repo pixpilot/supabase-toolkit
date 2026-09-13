@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 import { BackupError } from '../core/errors.js';
 
@@ -17,11 +19,18 @@ export async function withTemporaryDirectory<T>(
   }
 }
 
-/** Computes the SHA-256 digest of a file. */
+/**
+ * Computes the SHA-256 digest of a file, reading it a chunk at a time.
+ *
+ * An archive can be larger than `fs.readFile` will return, which stops at 2 GiB,
+ * and larger again than this process should hold, so the file is never collected.
+ */
 export async function sha256File(path: string): Promise<string> {
-  return createHash('sha256')
-    .update(await readFile(path))
-    .digest('hex');
+  const digest = createHash('sha256');
+  await pipeline(createReadStream(path), async (source) => {
+    for await (const chunk of source) digest.update(chunk as Buffer);
+  });
+  return digest.digest('hex');
 }
 
 /** Ensures a dump exists and is not empty before inspecting it. */

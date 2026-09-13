@@ -43,6 +43,7 @@ import {
 } from '../src/utils/files.js';
 import { systemRunner } from '../src/utils/process.js';
 import { redact } from '../src/utils/redact.js';
+import { MemoryStore } from './helpers/memory-store.js';
 
 const env = {
   SOURCE_DATABASE_URL:
@@ -54,28 +55,6 @@ const env = {
   R2_BUCKET: 'private-backups',
   BACKUP_PREFIX: 'production/database',
 };
-
-class MemoryStore {
-  public readonly values = new Map<string, Uint8Array>();
-  public async get(key: string): Promise<Uint8Array> {
-    const value = this.values.get(key);
-    if (!value) throw new Error('missing');
-    return value;
-  }
-
-  public async has(key: string): Promise<boolean> {
-    return this.values.has(key);
-  }
-
-  public async list(prefix: string): Promise<string[]> {
-    return [...this.values.keys()].filter((key) => key.startsWith(prefix));
-  }
-
-  public async putImmutable(key: string, body: Uint8Array): Promise<void> {
-    if (this.values.has(key)) throw new BackupError('overwrite');
-    this.values.set(key, body);
-  }
-}
 
 function manifest(): BackupManifest {
   return {

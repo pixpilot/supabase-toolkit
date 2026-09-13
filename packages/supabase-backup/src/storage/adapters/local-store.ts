@@ -1,8 +1,16 @@
+import type { Readable } from 'node:stream';
 import type { InputField } from '../../core/input.js';
-import type { ObjectStore, StorageAdapter, StorageSettings } from '../object-store.js';
+import type {
+  ObjectBody,
+  ObjectStore,
+  StorageAdapter,
+  StorageSettings,
+} from '../object-store.js';
 
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { required } from '../../core/env.js';
 import { BackupError } from '../../core/errors.js';
 
@@ -62,7 +70,7 @@ export class LocalStore implements ObjectStore {
     }
   }
 
-  public async putImmutable(key: string, body: Uint8Array): Promise<void> {
+  public async putImmutable(key: string, body: ObjectBody): Promise<void> {
     const path = this.pathFor(key);
     if (await this.has(key))
       throw new BackupError(`Refusing to overwrite existing local object '${key}'.`);
@@ -73,7 +81,13 @@ export class LocalStore implements ObjectStore {
     }
     try {
       // 'wx' fails when the path exists, so two concurrent runs cannot both win.
-      await writeFile(path, body, { flag: 'wx', mode: 0o600 });
+      if (body instanceof Uint8Array)
+        await writeFile(path, body, { flag: 'wx', mode: 0o600 });
+      else
+        await pipeline(
+          createReadStream(body.file),
+          createWriteStream(path, { flags: 'wx', mode: 0o600 }),
+        );
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST')
         throw new BackupError(`Refusing to overwrite existing local object '${key}'.`);
@@ -88,6 +102,15 @@ export class LocalStore implements ObjectStore {
     } catch {
       throw new BackupError(`Local storage read failed for '${key}'.`);
     }
+  }
+
+  public async getStream(key: string): Promise<Readable> {
+    const path = this.pathFor(key);
+    // Opened here rather than inside the stream, so a missing object is reported
+    // as this store's own error instead of surfacing later as a stream failure.
+    if (!(await this.has(key)))
+      throw new BackupError(`Local storage read failed for '${key}'.`);
+    return createReadStream(path);
   }
 
   public async list(prefix: string): Promise<string[]> {

@@ -1,7 +1,6 @@
 import type { CliArguments } from '../src/cli/command-line.js';
 import type { InputValues } from '../src/cli/interactive.js';
 import type { Prompter, TextPromptOptions } from '../src/cli/prompt.js';
-import type { ObjectStore } from '../src/storage/object-store.js';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import packageJson from '../package.json' with { type: 'json' };
@@ -34,6 +33,7 @@ import {
   filterExistingSchemas,
   restoreFollowUp,
 } from '../src/restore/restore.js';
+import { MemoryStore } from './helpers/memory-store.js';
 
 /** The flags a fully specified run passes. */
 const connectionFlags: Record<string, string> = {
@@ -99,27 +99,6 @@ class StubPrompter implements Prompter {
 }
 
 /** Minimal in-memory object store for listing manifests. */
-class MemoryStore implements ObjectStore {
-  public readonly values = new Map<string, Uint8Array>();
-  public async get(key: string): Promise<Uint8Array> {
-    const value = this.values.get(key);
-    if (!value) throw new BackupError(`missing ${key}`);
-    return value;
-  }
-
-  public async has(key: string): Promise<boolean> {
-    return this.values.has(key);
-  }
-
-  public async list(prefix: string): Promise<string[]> {
-    return [...this.values.keys()].filter((key) => key.startsWith(prefix));
-  }
-
-  public async putImmutable(key: string, body: Uint8Array): Promise<void> {
-    this.values.set(key, body);
-  }
-}
-
 function args(
   command: string,
   values: Record<string, string> = {},

@@ -254,15 +254,14 @@ export async function restore(
     logRestoreProgress(
       'Downloading application and Auth archives and verifying checksums...',
     );
-    const archives = await readVerifiedArchives(manifest, store);
+    await readVerifiedArchives(manifest, store, {
+      app: appEncrypted,
+      auth: authEncrypted,
+    });
     logRestoreProgress(
       'Archive checksums verified. Preparing temporary restore files...',
     );
-    await Promise.all([
-      writePrivateFile(appEncrypted, archives.app),
-      writePrivateFile(authEncrypted, archives.auth),
-      writePrivateFile(identity, `${config.ageIdentity}\n`),
-    ]);
+    await writePrivateFile(identity, `${config.ageIdentity}\n`);
     logRestoreProgress('Decrypting application archive...');
     await runner.run('age', [
       '--decrypt',

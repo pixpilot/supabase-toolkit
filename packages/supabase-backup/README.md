@@ -600,7 +600,8 @@ bucket**.
 
 - Do not use `secrets: inherit`; pass only the three required secrets explicitly.
 - Lifecycle deletion is asynchronous and typically occurs within 24 hours after expiry.
-- `status` downloads both encrypted archives to check their lengths and SHA-256 hashes; it does not prove a database restore will succeed.
+- `status` streams both encrypted archives to check their lengths and SHA-256 hashes; it does not prove a database restore will succeed.
+- Archives upload in parts and are never held whole in memory, so backup size is bounded by the bucket rather than by this process.
 - New backups also download their uploaded archives for verification before publishing the manifest.
 - Keep `pg_dump`, `pg_restore`, and `psql` from the same PostgreSQL client installation.
 - Required custom roles, extensions, and target default privileges must be compatible before recovery.

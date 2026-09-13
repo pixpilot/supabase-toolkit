@@ -1,4 +1,15 @@
+import type { Readable } from 'node:stream';
 import type { InputField } from '../core/input.js';
+
+/**
+ * What a backend is handed to store.
+ *
+ * Small objects travel as bytes, because a checksum or a manifest is easier to
+ * build in memory than to write out first. An archive names a file instead: it
+ * can be larger than a process should ever hold, and `fs.readFile` refuses
+ * anything past 2 GiB, so the only safe way to send one is straight from disk.
+ */
+export type ObjectBody = Uint8Array | { file: string };
 
 /**
  * The storage contract every backend implements.
@@ -8,12 +19,16 @@ import type { InputField } from '../core/input.js';
  * same way. `putImmutable` is the guarantee the whole tool rests on: a key that
  * already exists is never rewritten, so a finished backup cannot be replaced by
  * a later one that happens to land on the same key.
+ *
+ * `get` reads a small object whole; `getStream` is how an archive is read, for
+ * the same reason it is written from a file rather than from memory.
  */
 export interface ObjectStore {
   get: (key: string) => Promise<Uint8Array>;
+  getStream: (key: string) => Promise<Readable>;
   has: (key: string) => Promise<boolean>;
   list: (prefix: string) => Promise<string[]>;
-  putImmutable: (key: string, body: Uint8Array) => Promise<void>;
+  putImmutable: (key: string, body: ObjectBody) => Promise<void>;
 }
 
 /** The storage backends this package ships. */
