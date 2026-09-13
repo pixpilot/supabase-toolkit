@@ -110,16 +110,28 @@ Left alone, a backup takes **every schema the project owns**, whole: `public`,
 `supabase_migrations`, which is kept with both its definitions and its rows.
 Nothing has to be named for a new schema to reach the backup.
 
-Two groups are left out, because they are not the project's to define:
+Three groups are left out, because they are not the project's to define:
 
-| Group            | Schemas                                                                                                                                                                         | Why                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| PostgreSQL's own | `pg_catalog`, `pg_toast`, `information_schema`, `pg_temp_*`, `pg_toast_temp_*`                                                                                                  | PostgreSQL maintains them for itself.              |
-| Supabase-managed | `auth`, `storage`, `realtime`, `supabase_functions`, `graphql`, `graphql_public`, `extensions`, `pgsodium`, `pgsodium_masks`, `vault`, `pgbouncer`, `net`, `cron`, `_analytics` | Supabase defines them on every project it creates. |
+| Group            | Schemas                                                                                                                                                                                                    | Why                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| PostgreSQL's own | `pg_catalog`, `pg_toast`, `information_schema`, `pg_temp_*`, `pg_toast_temp_*`                                                                                                                             | PostgreSQL maintains them for itself.              |
+| Supabase-managed | `auth`, `storage`, `realtime`, `supabase_functions`, `graphql`, `graphql_public`, `extensions`, `pgsodium`, `pgsodium_masks`, `vault`, `pgbouncer`, `net`, `cron`, `_analytics`, `_realtime`, `_supavisor` | Supabase defines them on every project it creates. |
+| Extension-owned  | Any schema holding only objects an extension installed, such as `pgmq` (Queues), `pgtle`, or PostGIS's `tiger`                                                                                             | `CREATE EXTENSION` on the target creates them.     |
 
 The durable rows inside the managed ones are still backed up, table by table:
 `auth.users`, `auth.identities`, `storage.buckets`, and `storage.objects`. They
 are dumped and restored as data, never as definitions.
+
+A schema counts as extension-owned only when every object in it belongs to an
+extension, so a schema holding anything you created is always taken whole, and
+`public` is never treated this way even while it is empty. Naming such a schema
+with `--schemas` takes it anyway; a restore then needs its objects absent from
+the target.
+
+Which extensions the source had is recorded in the manifest. A restore checks
+them against the target and stops, before writing anything, naming each one that
+is missing — nothing in an archive installs an extension, because `pg_dump` of
+named schemas writes no `CREATE EXTENSION`.
 
 Two flags override the selection, and both are flags only — neither is ever
 asked for at the prompt:
@@ -278,6 +290,11 @@ recreate them.
 queues, Vault secrets, and extensions installed into `extensions` live in schemas
 Supabase defines, so their definitions and rows are not carried. A fresh project
 brings its own.
+
+**Extensions.** No archive installs one. Enable every extension the manifest
+records on the recovery project first; a restore refuses up front and names the
+ones that are missing, so an unprepared target costs a message rather than a
+half-applied recovery.
 
 **Everything outside the database.** Edge functions, their secrets, API keys,
 custom domains, network restrictions, and the project's own settings.

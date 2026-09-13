@@ -27,6 +27,10 @@ const env = {
 };
 
 interface SourceDatabase {
+  /** Schemas holding nothing but objects an extension installed. */
+  extensionSchemas?: string[];
+  /** Extensions the database has installed. */
+  extensions?: string[];
   /** Every schema the database reports, as pg_namespace lists them. */
   schemas: string[];
   /** Storage tables the database has, and whether the backup role may read them. */
@@ -49,7 +53,8 @@ function sourceConnection(
     async query<T extends Record<string, unknown>>(sql: string): Promise<{ rows: T[] }> {
       const answer = (values: Record<string, unknown>[]): { rows: T[] } =>
         rows(values) as { rows: T[] };
-      if (sql.includes('SHOW server_version')) return answer([{ version: '17.4' }]);
+      if (sql.includes('SHOW server_version'))
+        return answer([{ server_version: '17.4' }]);
       if (sql.includes('pg_export_snapshot')) return answer([{ snapshot: '0000003-1' }]);
       if (sql.includes('mfa_factors')) return answer([]);
       if (sql.includes('information_schema.columns')) {
@@ -67,6 +72,18 @@ function sourceConnection(
             table_name: table.replace('storage.', ''),
             readable,
           })),
+        );
+      }
+      // Only the extension-owned schema query groups; other queries name
+      // pg_depend too, so match on what is unique to it.
+      if (sql.includes('bool_and')) {
+        return answer(
+          (source.extensionSchemas ?? []).map((schema_name) => ({ schema_name })),
+        );
+      }
+      if (sql.includes('FROM pg_extension')) {
+        return answer(
+          (source.extensions ?? []).map((extension_name) => ({ extension_name })),
         );
       }
       if (sql.includes('nspname AS schema_name')) {
@@ -159,6 +176,7 @@ const supabase: SourceDatabase = {
     'pg_catalog',
     'pg_temp_3',
     'pg_toast',
+    'pgmq',
     'public',
     'realtime',
     'storage',
@@ -172,6 +190,8 @@ const supabase: SourceDatabase = {
     'public.user_roles',
     'supabase_migrations.schema_migrations',
   ],
+  extensionSchemas: ['pgmq'],
+  extensions: ['plpgsql', 'pgcrypto', 'pgmq'],
 };
 
 function manifest(): BackupManifest {
@@ -226,6 +246,27 @@ describe('choosing what a backup takes', () => {
     expect(metadata.appTableCounts.map(({ table }) => table)).toContain(
       'supabase_migrations.schema_migrations',
     );
+  });
+
+  it('leaves out a schema holding only objects an extension installed', async () => {
+    const { appArgs, metadata } = await dump(supabase);
+    expect(metadata.appSchemas).not.toContain('pgmq');
+    expect(appArgs).not.toContain('--schema="pgmq"');
+  });
+
+  it('still takes an extension schema a run named for itself', async () => {
+    const { metadata } = await dump(supabase, { appSchemas: ['public', 'pgmq'] });
+    expect(metadata.appSchemas).toEqual(['public', 'pgmq']);
+  });
+
+  it('records the extensions the source had, so a restore can require them', async () => {
+    const { metadata } = await dump(supabase);
+    expect(metadata.extensions).toEqual(['plpgsql', 'pgcrypto', 'pgmq']);
+  });
+
+  it('records the server version the source reported', async () => {
+    const { metadata } = await dump(supabase);
+    expect(metadata.postgresServerVersion).toBe('17.4');
   });
 
   it('takes only the schemas a run named, and nothing else', async () => {

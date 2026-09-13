@@ -7,6 +7,20 @@ function literal(value: string): string {
 }
 
 /**
+ * Excludes objects an extension owns from a check for what a schema holds.
+ *
+ * An extension installed into an application schema, such as PostGIS into
+ * `public`, leaves its tables, functions, and types there. A restore neither
+ * carries nor recreates them, because `pg_dump` writes no definition for an
+ * extension's own objects, so their presence says nothing about whether the
+ * schema is ready to receive one. Indexes are weighed with their tables, which
+ * is why only the object kinds a project creates directly are considered.
+ */
+function notExtensionOwned(catalog: string, alias: string): string {
+  return `AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = '${catalog}'::regclass AND d.objid = ${alias}.oid AND d.deptype = 'e')`;
+}
+
+/**
  * Rechecks the empty target under locks held until the entire restore commits.
  *
  * Managed storage tables are only checked, never locked: the restoring role is
@@ -35,11 +49,14 @@ BEGIN
     RAISE EXCEPTION 'Target Auth tables must be empty for recovery restore.';
   END IF;
   IF EXISTS (
-    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN (${names})
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN (${names}) AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f') ${notExtensionOwned('pg_class', 'c')}
     UNION ALL
-    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN (${names})
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname IN (${names}) ${notExtensionOwned('pg_proc', 'p')}
     UNION ALL
-    SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname IN (${names})
+    SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname IN (${names}) ${notExtensionOwned('pg_type', 't')}
   ) THEN
     RAISE EXCEPTION 'Target application schemas must be empty for recovery restore.';
   END IF;

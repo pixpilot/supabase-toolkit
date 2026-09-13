@@ -532,6 +532,39 @@ describe('PostgreSQL recovery safety', () => {
     await f.expectEmpty();
   });
 
+  it('restores into an application schema that already holds an extension', async () => {
+    const f = await fixture(undefined, async (source) => {
+      await source.db.query('CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public');
+    });
+    expect(f.manifest.extensions).toContain('pg_trgm');
+    // The extension puts its own functions and types in public. They are not the
+    // project's, so they must not read as a schema that is too full to restore.
+    await f.target.db.query('CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public');
+    await f.apply();
+    expect(
+      (await f.target.db.query('SELECT count(*)::int AS count FROM public.profiles'))
+        .rows,
+    ).toEqual([{ count: 1 }]);
+    expect(
+      (await f.target.db.query("SELECT similarity('backup', 'backup') AS same")).rows,
+    ).toEqual([{ same: 1 }]);
+  });
+
+  it('refuses a target missing an extension the backup needs, before any writes', async () => {
+    const f = await fixture();
+    expect(f.manifest.extensions).toContain('plpgsql');
+    f.store.values.set(
+      f.key,
+      Buffer.from(
+        JSON.stringify({ ...f.manifest, extensions: ['plpgsql', 'vector', 'postgis'] }),
+      ),
+    );
+    await expect(f.apply()).rejects.toThrow(
+      '2 extension(s) the backup needs: vector, postgis',
+    );
+    await f.expectEmpty();
+  });
+
   it('refuses existing Auth triggers instead of firing them during recovery', async () => {
     const f = await fixture();
     await f.target.db.query(`

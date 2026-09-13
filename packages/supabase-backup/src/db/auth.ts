@@ -60,6 +60,21 @@ export function preflightFailureMessage(
   return `Database preflight connection to ${databaseLabel(connection)} failed: ${reason}.${hint}`;
 }
 
+/**
+ * Matches libpq's own handling of the URL's `sslmode` for this connection.
+ *
+ * `require` asks for an encrypted connection and nothing more, which is what
+ * libpq does with it too. A URL that asked for a verified certificate gets one:
+ * downgrading it here would quietly weaken the one connection that carries the
+ * password, while `pg_dump` and `psql` still honoured it.
+ */
+export function preflightSslOptions(
+  sslmode: string,
+): false | { rejectUnauthorized: boolean } {
+  if (sslmode === 'disable') return false;
+  return { rejectUnauthorized: sslmode === 'verify-ca' || sslmode === 'verify-full' };
+}
+
 /** Connects for read-only metadata checks; dump and restore still use libpq environment variables. */
 export async function connectForPreflight(
   connection: DatabaseConnection,
@@ -70,7 +85,7 @@ export async function connectForPreflight(
     user: connection.user,
     password: connection.password,
     database: connection.database,
-    ssl: connection.sslmode === 'disable' ? false : { rejectUnauthorized: false },
+    ssl: preflightSslOptions(connection.sslmode),
   });
   try {
     await client.connect();
@@ -166,14 +181,32 @@ export async function ensureAuthTablesEmpty(db: Queryable): Promise<void> {
     );
 }
 
-/** Finds application table names for post-restore count validation. */
+/**
+ * Finds application table names for post-restore count validation.
+ *
+ * Tables an extension installed into an application schema are left out, such as
+ * PostGIS's `public.spatial_ref_sys`. They are the extension's, not the
+ * project's: the archive carries no definition for them, `CREATE EXTENSION` on
+ * the target already made them, and counting them would compare the two
+ * installations' own reference data rather than anything that was backed up.
+ */
 export async function getApplicationTables(
   db: Queryable,
   schemas: string[],
 ): Promise<string[]> {
   const values = schemas.map((schema) => `'${schema.replace(/'/gu, "''")}'`).join(', ');
   const result = await db.query<{ table_schema: string; table_name: string }>(
-    `SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema IN (${values}) ORDER BY table_schema, table_name`,
+    `SELECT t.table_schema, t.table_name
+     FROM information_schema.tables t
+     WHERE t.table_type = 'BASE TABLE' AND t.table_schema IN (${values})
+       AND NOT EXISTS (
+         SELECT 1 FROM pg_depend d
+         JOIN pg_class c ON c.oid = d.objid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE d.classid = 'pg_class'::regclass AND d.deptype = 'e'
+           AND n.nspname = t.table_schema AND c.relname = t.table_name
+       )
+     ORDER BY t.table_schema, t.table_name`,
   );
   return result.rows.map(
     ({ table_schema, table_name }) => `${table_schema}.${table_name}`,
@@ -198,6 +231,70 @@ export async function getSchemaNames(db: Queryable): Promise<string[]> {
     'SELECT nspname AS schema_name FROM pg_namespace ORDER BY nspname',
   );
   return result.rows.map(({ schema_name }) => schema_name);
+}
+
+/**
+ * Names the schemas that hold nothing but objects an extension installed.
+ *
+ * An extension such as `pgmq` or `pg_tle` brings its own schema, and that schema
+ * belongs to the extension rather than to the project: dumping it whole carries
+ * definitions the target already has once the extension is installed, and that
+ * is what blocks a restore. Only a schema with no object of the project's own in
+ * it qualifies, so a schema holding anything the project made is always kept,
+ * and `public` never qualifies at all: every database has it and an application
+ * is entitled to it even while it is still empty. Only the object kinds a
+ * project creates directly are weighed, because an index or a composite type's
+ * entry carries no extension dependency even when its table does.
+ */
+export async function getExtensionOwnedSchemas(db: Queryable): Promise<string[]> {
+  const result = await db.query<{ schema_name: string }>(
+    `SELECT n.nspname AS schema_name
+     FROM pg_namespace n
+     JOIN (
+       SELECT c.relnamespace AS namespace, c.oid, 'pg_class'::regclass AS catalog FROM pg_class c
+         WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+       UNION ALL SELECT p.pronamespace, p.oid, 'pg_proc'::regclass FROM pg_proc p
+       UNION ALL SELECT t.typnamespace, t.oid, 'pg_type'::regclass FROM pg_type t
+     ) o ON o.namespace = n.oid
+     LEFT JOIN pg_depend d
+       ON d.objid = o.oid AND d.classid = o.catalog AND d.deptype = 'e'
+     WHERE n.nspname <> 'public'
+     GROUP BY n.nspname
+     HAVING bool_and(d.objid IS NOT NULL)
+     ORDER BY n.nspname`,
+  );
+  return result.rows.map(({ schema_name }) => schema_name);
+}
+
+/** Lists the extensions a database has, so a restore can require them first. */
+export async function getExtensions(db: Queryable): Promise<string[]> {
+  const result = await db.query<{ extension_name: string }>(
+    'SELECT extname AS extension_name FROM pg_extension ORDER BY extname',
+  );
+  return result.rows.map(({ extension_name }) => extension_name);
+}
+
+/**
+ * Requires the target to already have every extension the source had.
+ *
+ * Nothing in an archive installs one: `pg_dump --schema` writes no
+ * `CREATE EXTENSION`, so a table using a type, function, or index method an
+ * extension provides fails partway through the restore. Naming all of them at
+ * once, before anything is written, is the difference between one message and a
+ * recovery discovered an extension at a time.
+ */
+export async function ensureExtensionsPresent(
+  db: Queryable,
+  expected: readonly string[] | undefined,
+): Promise<void> {
+  if (!expected?.length) return;
+  const present = new Set(await getExtensions(db));
+  const missing = expected.filter((name) => !present.has(name));
+  if (missing.length)
+    throw new BackupError(
+      `Target is missing ${missing.length} extension(s) the backup needs: ${missing.join(', ')}. ` +
+        'Install them on the recovery database first, for example CREATE EXTENSION IF NOT EXISTS "<name>";',
+    );
 }
 
 /**

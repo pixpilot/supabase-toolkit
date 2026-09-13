@@ -24,6 +24,8 @@ export const postgresSystemSchemaPatterns = [/^pg_temp_\d+$/u, /^pg_toast_temp_\
  */
 export const supabaseManagedSchemas = [
   '_analytics',
+  '_realtime',
+  '_supavisor',
   'auth',
   'cron',
   'extensions',

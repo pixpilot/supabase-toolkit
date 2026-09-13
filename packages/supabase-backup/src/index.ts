@@ -60,10 +60,14 @@ export {
 } from './core/validation.js';
 export {
   ensureApplicationSchemasEmpty,
+  ensureExtensionsPresent,
   getExistingSchemas,
+  getExtensionOwnedSchemas,
+  getExtensions,
   getManagedStorageTables,
   getSchemaNames,
   preflightFailureMessage,
+  preflightSslOptions,
 } from './db/auth.js';
 export {
   databaseLabel,

@@ -133,8 +133,8 @@ export class R2Store implements ObjectStore {
           IfNoneMatch: '*',
         }),
       );
-    } catch {
-      throw new BackupError(`R2 upload failed for '${key}'.`);
+    } catch (error: unknown) {
+      throw new BackupError(`R2 upload failed for '${key}'${r2ErrorDetails(error)}.`);
     }
   }
 
@@ -144,8 +144,8 @@ export class R2Store implements ObjectStore {
         new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
       );
       return await output.Body!.transformToByteArray();
-    } catch {
-      throw new BackupError(`R2 download failed for '${key}'.`);
+    } catch (error: unknown) {
+      throw new BackupError(`R2 download failed for '${key}'${r2ErrorDetails(error)}.`);
     }
   }
 
@@ -167,8 +167,8 @@ export class R2Store implements ObjectStore {
         token = page.NextContinuationToken;
       } while (token);
       return keys;
-    } catch {
-      throw new BackupError('R2 object listing failed.');
+    } catch (error: unknown) {
+      throw new BackupError(`R2 object listing failed${r2ErrorDetails(error)}.`);
     }
   }
 }

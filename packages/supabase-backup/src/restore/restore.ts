@@ -13,6 +13,7 @@ import {
   ensureApplicationSchemasEmpty,
   ensureAuthCompatible,
   ensureAuthTablesEmpty,
+  ensureExtensionsPresent,
   getExistingSchemas,
   getManagedStorageTables,
   getTableCounts,
@@ -296,6 +297,8 @@ export async function restore(
     try {
       logRestoreProgress('Checking target Auth table compatibility...');
       await ensureAuthCompatible(targetDb, manifest.authColumns);
+      logRestoreProgress('Checking target extensions...');
+      await ensureExtensionsPresent(targetDb, manifest.extensions);
       if (!options.apply) {
         process.stdout.write(
           `Restore plan (no changes): target ${databaseLabel(target)}; Auth columns are compatible. Apply requires empty application schemas and Auth tables, matching roles/extensions, and no existing custom Auth triggers.\n`,

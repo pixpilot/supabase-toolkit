@@ -1,7 +1,7 @@
 import type { AccessChecks } from './access-checks.js';
 import { isAccessChecks } from './access-checks.js';
 import { BackupError } from './errors.js';
-import { parseAppSchemas } from './validation.js';
+import { parseSchemaList } from './validation.js';
 
 export const authTables = ['auth.users', 'auth.identities'] as const;
 export type AuthTable = (typeof authTables)[number];
@@ -46,6 +46,8 @@ export interface BackupManifest {
   cliVersion: string;
   createdAt: string;
   environment: string;
+  /** Extensions the source database had, so a restore can require them first. */
+  extensions?: string[];
   pgDumpVersion: string;
   postgresServerVersion: string;
   storageRowCounts?: TableCount[];
@@ -77,7 +79,14 @@ export function backupObjectKeys(
   };
 }
 
-/** Rejects malformed manifests before they can guide a restore. */
+/**
+ * Rejects malformed manifests before they can guide a restore.
+ *
+ * Only the shape is checked here, never which schemas a backup should have
+ * taken. That choice belongs to the run that wrote the manifest: re-applying
+ * today's rules would make a backup unreadable the day a schema joins the
+ * managed list, which is exactly when its archive is still needed.
+ */
 export function parseManifest(value: string): BackupManifest {
   let manifest: unknown;
   try {
@@ -119,12 +128,14 @@ export function parseManifest(value: string): BackupManifest {
     !item.authColumns ||
     !validCounts(item.appTableCounts) ||
     !validCounts(item.authRowCounts) ||
+    !validExtensions(item.extensions) ||
     !validStorage(item)
   ) {
     throw new BackupError('Backup manifest is incomplete or invalid.');
   }
-  const schemas = parseAppSchemas(item.appSchemas.join(','));
+  const schemas = parseSchemaList(item.appSchemas.join(','));
   if (
+    !schemas.length ||
     new Set(schemas).size !== schemas.length ||
     schemas.length !== item.appSchemas.length ||
     schemas.some((schema, index) => schema !== item.appSchemas?.[index]) ||
@@ -154,6 +165,25 @@ export function parseManifest(value: string): BackupManifest {
 
 function isText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/** Matches a PostgreSQL extension name, such as 'uuid-ossp' or 'pg_net'. */
+const extensionName = /^[\w-]{1,63}$/u;
+
+/**
+ * Accepts a manifest without the extension list, and validates it when present.
+ *
+ * Backups written before extensions were recorded carry no field at all, and a
+ * restore simply cannot check them; an empty list is a database that reported
+ * none rather than a manifest that lost them.
+ */
+function validExtensions(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every((name: unknown) => isText(name) && extensionName.test(name)) &&
+    new Set(value).size === value.length
+  );
 }
 
 /**

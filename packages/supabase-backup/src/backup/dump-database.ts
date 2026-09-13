@@ -12,6 +12,8 @@ import {
   ensureSupportedAuthState,
   getApplicationTables,
   getAuthColumns,
+  getExtensionOwnedSchemas,
+  getExtensions,
   getManagedStorageTables,
   getSchemaNames,
   getTableCounts,
@@ -24,8 +26,9 @@ import { captureAccessChecks } from './capture-access-checks.js';
  * Decides which schemas this run dumps whole.
  *
  * A run that named schemas gets exactly those, so nothing it did not ask for is
- * read. A run that named none gets every schema the project owns, which is the
- * only way a schema added later still reaches the backup.
+ * read, and nothing it did ask for is quietly dropped. A run that named none
+ * gets every schema the project owns, which is the only way a schema added later
+ * still reaches the backup, less the schemas an extension brought with it.
  */
 async function chooseSchemas(db: Queryable, config: BackupConfig): Promise<string[]> {
   const discovered = await getSchemaNames(db);
@@ -36,7 +39,10 @@ async function chooseSchemas(db: Queryable, config: BackupConfig): Promise<strin
     );
   const schemas = config.appSchemas
     ? config.appSchemas.filter((schema) => !config.excludedSchemas.includes(schema))
-    : selectBackupSchemas(discovered, config.excludedSchemas);
+    : selectBackupSchemas(discovered, [
+        ...config.excludedSchemas,
+        ...(await getExtensionOwnedSchemas(db)),
+      ]);
   if (!schemas.length)
     throw new BackupError(
       'No schemas left to back up. Name the schemas to dump with --schemas, or leave more of them in with --exclude-schemas.',
@@ -60,9 +66,10 @@ export async function dumpDatabase(
   const connection = parseDatabaseUrl(config.sourceDatabaseUrl);
   const db = await connect(connection);
   try {
+    // SHOW returns the setting under its own name, so the column is server_version.
     const postgresServerVersion =
-      (await db.query<{ version: string }>('SHOW server_version')).rows[0]?.version ||
-      'unknown';
+      (await db.query<{ server_version: string }>('SHOW server_version')).rows[0]
+        ?.server_version || 'unknown';
     const pgDumpVersion = await ensureDumpToolsCompatible(runner, postgresServerVersion);
     await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await db.query('SET LOCAL search_path = pg_catalog');
@@ -90,6 +97,7 @@ export async function dumpDatabase(
     if (!appAccessFingerprint)
       throw new BackupError('Could not capture application access rules.');
     const accessChecks = await captureAccessChecks(db, appSchemas);
+    const extensions = await getExtensions(db);
     const common = ['--format=custom', '--strict-names', `--snapshot=${snapshot}`];
     const options = { env: toLibpqEnvironment(connection) };
     await runner.run(
@@ -119,6 +127,7 @@ export async function dumpDatabase(
         ? { storageTables: storage.readable, storageRowCounts }
         : {}),
       appSchemas,
+      extensions,
       postgresServerVersion,
       pgDumpVersion,
       authColumns,
