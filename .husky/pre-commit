@@ -5,6 +5,14 @@ if [ -n "$CI" ]; then
 	exit 0
 fi
 
+# Regenerate the README Packages section and stage it only when it actually changed.
+readme_before=$(git hash-object README.md)
+pnpm run generate-packages-section || exit 1
+readme_after=$(git hash-object README.md)
+if [ "$readme_before" != "$readme_after" ]; then
+	git add -- README.md
+fi
+
 # --no-stash: keep changes in the working tree so an interrupted hook
 # (cancelled/killed/crashed) can never strand them in a hidden stash.
 pnpm exec lint-staged --no-stash

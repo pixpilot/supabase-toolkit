@@ -35,6 +35,10 @@ pnpm run turbo:gen:init
 
 ## 📦 Packages
 
+### [supabase-backup](./packages/supabase-backup/README.md)
+
+Encrypted, consistent backups and restores of every schema a Supabase project owns, plus auth and storage rows.
+
 ### [supabase-camel](./packages/supabase-camel/README.md)
 
 TypeScript utilities for Supabase with automatic camelCase/snake_case conversion.
