@@ -1,7 +1,7 @@
 {
   "name": "@pixpilot/supabase-backup",
   "type": "module",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "packageManager": "pnpm@10.17.0",
   "description": "Encrypted, consistent backups and restores of every schema a Supabase project owns, plus auth and storage rows.",
   "author": "Mo Doaie <m.doaie@hotmail.com>",

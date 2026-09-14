@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 3.8.0
+
+### Minor Changes
+
+- update README.md with package description
+
 ## 3.7.0
 
 ### Minor Changes
