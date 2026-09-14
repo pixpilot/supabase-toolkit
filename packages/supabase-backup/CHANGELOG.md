@@ -1,5 +1,11 @@
 # @pixpilot/supabase-backup
 
+## 3.7.0
+
+### Minor Changes
+
+- add support for unencrypted backups and improve error handling
+
 ## 3.6.0
 
 ### Minor Changes
