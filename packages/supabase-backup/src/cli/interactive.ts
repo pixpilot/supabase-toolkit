@@ -109,12 +109,17 @@ export const excludedSchemasField: InputField = {
  * Everything `backup` reads, in the order an operator is asked for it.
  *
  * The storage settings come from the selected backend rather than from a fixed
- * list, so a run is only ever asked for the ones that backend uses.
+ * list, so a run is only ever asked for the ones that backend uses. A recipient
+ * is one of them until a run says it wants no encryption, which is the only way
+ * not to be asked for one.
  */
-export function backupFieldsFor(driver: StorageDriver): readonly InputField[] {
+export function backupFieldsFor(
+  driver: StorageDriver,
+  encrypted = true,
+): readonly InputField[] {
   return [
     sourceDatabaseUrlField,
-    ageRecipientField,
+    ...(encrypted ? [ageRecipientField] : []),
     ...storageFields(driver),
     backupPrefixField,
     appSchemasField,

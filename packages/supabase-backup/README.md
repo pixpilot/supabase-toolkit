@@ -6,7 +6,8 @@ captured from one consistent database snapshot.
 It is deliberately not full Supabase-project disaster recovery: read
 [what a restore does not carry](#what-a-restore-does-not-carry) before relying on
 it. Requires Node
-22+, `pg_dump`, `pg_restore`, `psql`, and `age`; direct PostgreSQL or the Supabase
+22+, `pg_dump`, `pg_restore`, `psql`, and `age` (not needed with
+[`--no-encryption`](#taking-a-backup-without-encryption)); direct PostgreSQL or the Supabase
 Session Pooler on port 5432 is supported, while Transaction Pooler port 6543 is rejected.
 
 ## Create an R2 bucket
@@ -31,6 +32,8 @@ next to API Tokens.
 ## Generate an age encryption key
 
 Location: a secure terminal on the machine where you will store the restore key.
+Skip this only if you are taking an unencrypted backup on purpose; see
+[taking a backup without encryption](#taking-a-backup-without-encryption).
 
 1. Generate a key pair:
 
@@ -90,7 +93,8 @@ myapp-production-backups
 
 `v1` is the key-layout generation and only changes if the structure does. Folder
 names sort chronologically, so `status` finds the newest backup by listing
-`<prefix>/v1/`.
+`<prefix>/v1/`. A backup taken with [`--no-encryption`](#taking-a-backup-without-encryption)
+stores `app.dump` and `auth.dump` instead, without the `.age` suffix.
 
 Manifests require `formatVersion: 2`. Counts, application access rules, and both
 archives use the same exported PostgreSQL snapshot. Application ownership,
@@ -378,29 +382,30 @@ to mean local. In a terminal, a run that passes no storage option is offered the
 list to pick from, and one that names no command is offered the commands — which
 is what a bare `supabase-backup` does.
 
-| Option                         | Commands  | Purpose                                                           |
-| ------------------------------ | --------- | ----------------------------------------------------------------- |
-| `--storage <r2\|local>`        | all       | Where backups are kept. Default: `r2`.                            |
-| `--r2-endpoint <url>`          | all       | `r2`: `https://<account-id>.r2.cloudflarestorage.com`.            |
-| `--r2-bucket <name>`           | all       | `r2`: private bucket holding the backups.                         |
-| `--r2-access-key-id <id>`      | all       | `r2`: access key ID.                                              |
-| `--r2-secret-access-key <key>` | all       | `r2`: secret access key.                                          |
-| `--storage-root <dir>`         | all       | `local`: directory that holds the backups.                        |
-| `--source-database-url <url>`  | `backup`  | Database to back up.                                              |
-| `--age-recipient <age1…>`      | `backup`  | Public recipient used to encrypt.                                 |
-| `--age-identity <AGE-SECRET…>` | `restore` | Private identity used to decrypt.                                 |
-| `--target-database-url <url>`  | `restore` | Database to restore into, required by `--apply`.                  |
-| `--prefix <prefix>`            | all       | Object-key prefix. Default: `production/database`.                |
-| `--schemas <a,b>`              | `backup`  | Back up only these schemas. Default: all the project owns.        |
-| `--exclude-schemas <a,b>`      | `backup`  | Schemas to leave out.                                             |
-| `--max-age-hours <hours>`      | `status`  | Fail when the newest backup is older.                             |
-| `--key <manifest-key>`         | `restore` | Manifest to restore, ending in `.json`.                           |
-| `--apply`                      | `restore` | Write to the target database; omit for a dry run.                 |
-| `--no-access-checks`           | `restore` | Skip advisory default-grant and role-membership checks.           |
-| `--confirm-target <ref>`       | `restore` | Typed confirmation: project ref, else `<host>:<port>/<database>`. |
-| `--no-input`                   | all       | Never ask; fail when a value is missing.                          |
-| `-v`, `--version`              | all       | Print the version that is running.                                |
-| `-h`, `--help`                 | all       | Print the option list.                                            |
+| Option                         | Commands            | Purpose                                                           |
+| ------------------------------ | ------------------- | ----------------------------------------------------------------- |
+| `--storage <r2\|local>`        | all                 | Where backups are kept. Default: `r2`.                            |
+| `--r2-endpoint <url>`          | all                 | `r2`: `https://<account-id>.r2.cloudflarestorage.com`.            |
+| `--r2-bucket <name>`           | all                 | `r2`: private bucket holding the backups.                         |
+| `--r2-access-key-id <id>`      | all                 | `r2`: access key ID.                                              |
+| `--r2-secret-access-key <key>` | all                 | `r2`: secret access key.                                          |
+| `--storage-root <dir>`         | all                 | `local`: directory that holds the backups.                        |
+| `--source-database-url <url>`  | `backup`            | Database to back up.                                              |
+| `--age-recipient <age1…>`      | `backup`            | Public recipient used to encrypt.                                 |
+| `--age-identity <AGE-SECRET…>` | `restore`           | Private identity used to decrypt.                                 |
+| `--target-database-url <url>`  | `restore`           | Database to restore into, required by `--apply`.                  |
+| `--prefix <prefix>`            | all                 | Object-key prefix. Default: `production/database`.                |
+| `--schemas <a,b>`              | `backup`            | Back up only these schemas. Default: all the project owns.        |
+| `--exclude-schemas <a,b>`      | `backup`            | Schemas to leave out.                                             |
+| `--max-age-hours <hours>`      | `status`            | Fail when the newest backup is older.                             |
+| `--key <manifest-key>`         | `restore`           | Manifest to restore, ending in `.json`.                           |
+| `--apply`                      | `restore`           | Write to the target database; omit for a dry run.                 |
+| `--no-access-checks`           | `restore`           | Skip advisory default-grant and role-membership checks.           |
+| `--no-encryption`              | `backup`, `restore` | Store the dumps unencrypted; on restore, read such a backup.      |
+| `--confirm-target <ref>`       | `restore`           | Typed confirmation: project ref, else `<host>:<port>/<database>`. |
+| `--no-input`                   | all                 | Never ask; fail when a value is missing.                          |
+| `-v`, `--version`              | all                 | Print the version that is running.                                |
+| `-h`, `--help`                 | all                 | Print the option list.                                            |
 
 A database URL is treated as requiring TLS unless it says otherwise. A local
 database serves none, so a run against one — `supabase start` listens on port
@@ -425,6 +430,53 @@ personal or shared machine, leave `--r2-secret-access-key`, `--age-identity`,
 `--source-database-url`, and `--target-database-url` out and answer their hidden
 prompts instead; pass them as flags from a CI job, where the runner is yours
 alone and the values are masked in the log.
+
+## Taking a backup without encryption
+
+Every backup is encrypted to `--age-recipient`. `--no-encryption` is the only
+way to get one that is not, and it has to be asked for on each run:
+
+```bash
+npx @pixpilot/supabase-backup@latest backup \
+  --no-encryption \
+  --source-database-url 'postgresql://…' \
+  --r2-access-key-id … \
+  --r2-secret-access-key … \
+  --r2-endpoint 'https://<account>.r2.cloudflarestorage.com' \
+  --r2-bucket 'myapp-production-backups'
+```
+
+The archives are then stored exactly as `pg_dump` wrote them, named `app.dump`
+and `auth.dump` rather than `.age`, and **anyone who can read the bucket can read
+the whole database** — every row of `auth.users` included. Use it for a local
+drill, a throwaway fixture, or a target whose storage is already encrypted and
+access-controlled to your satisfaction. For anything holding real user data,
+leave it off.
+
+`--no-encryption` cannot be combined with `--age-recipient`; passing both is
+refused rather than resolved, so a run never stores plaintext by accident. It is
+also refused on `status`, which never needs a key either way.
+
+Each manifest records which kind it is, as `"encryption": "age"` or
+`"encryption": "none"`, and the restore believes the manifest rather than the
+flags: it says so on stderr whenever the backup it is reading is unencrypted,
+however the run was invoked. To restore a backup taken this way, pass
+`--no-encryption` again so no identity is asked for:
+
+```bash
+npx @pixpilot/supabase-backup@latest restore \
+  --no-encryption \
+  --key 'production/database/v1/20260910T031700Z/manifest.json' \
+  --r2-access-key-id … \
+  --r2-secret-access-key … \
+  --r2-endpoint 'https://<account>.r2.cloudflarestorage.com' \
+  --r2-bucket 'myapp-production-backups'
+```
+
+A restore told to expect plaintext that finds an encrypted backup stops and asks
+for `--age-identity` instead of failing part-way through. Backups written before
+this option existed carry no `encryption` field and are always decrypted, so
+nothing about restoring them changes.
 
 ## Storage backends
 

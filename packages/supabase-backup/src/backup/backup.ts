@@ -9,6 +9,7 @@ import packageJson from '../../package.json' with { type: 'json' };
 import { loadBackupConfig } from '../core/config.js';
 import { BackupError } from '../core/errors.js';
 import { authTables, backupObjectKeys } from '../core/manifest.js';
+import { ensureValidAgeRecipient } from '../core/validation.js';
 import { createObjectStore } from '../storage/create-object-store.js';
 import { readVerifiedArchives } from '../storage/read-verified-archives.js';
 import {
@@ -18,6 +19,24 @@ import {
 } from '../utils/files.js';
 import { systemRunner } from '../utils/process.js';
 import { dumpDatabase } from './dump-database.js';
+
+/**
+ * Encrypts one dump to the recipient, or leaves it alone when a run opted out.
+ *
+ * Returns the file that is uploaded, so the plaintext dump is unlinked only once
+ * an encrypted copy of it exists to take its place.
+ */
+async function sealArchive(
+  runner: ProgramRunner,
+  dump: string,
+  recipient: string | undefined,
+): Promise<string> {
+  if (recipient === undefined) return dump;
+  const encrypted = `${dump}.age`;
+  await runner.run('age', ['--recipient', recipient, '--output', encrypted, dump]);
+  await unlink(dump);
+  return encrypted;
+}
 
 /** Creates encrypted, immutable app/Auth archives and publishes their manifest last. */
 export async function backup(
@@ -33,49 +52,48 @@ export async function backupWithConfig(
   config: BackupConfig,
   dependencies: { now?: Date; runner?: ProgramRunner; store?: ObjectStore } = {},
 ): Promise<BackupManifest> {
+  const encrypted = config.encryption !== 'none';
+  if (encrypted) {
+    if (!config.ageRecipient?.trim())
+      throw new BackupError(
+        'ageRecipient is required unless encryption is explicitly set to none.',
+      );
+    ensureValidAgeRecipient(config.ageRecipient);
+  } else if (config.ageRecipient !== undefined) {
+    throw new BackupError('encryption: none cannot be combined with ageRecipient.');
+  }
   const runner = dependencies.runner || systemRunner;
   const store = dependencies.store || createObjectStore(config);
   const createdAt = dependencies.now || new Date();
-  const keys = backupObjectKeys(config.prefix, createdAt);
+  if (!encrypted)
+    process.stderr.write(
+      'Encryption is off: this backup is stored as a plaintext database dump, readable by anyone who can read the backup storage.\n',
+    );
+  const keys = backupObjectKeys(config.prefix, createdAt, encrypted);
   for (const key of Object.values(keys))
     if (await store.has(key))
       throw new BackupError(`Refusing to overwrite existing object '${key}'.`);
   return withTemporaryDirectory(async (directory) => {
     const appDump = join(directory, 'app.dump');
     const authDump = join(directory, 'auth.dump');
-    const appEncrypted = `${appDump}.age`;
-    const authEncrypted = `${authDump}.age`;
     const metadata = await dumpDatabase(config, runner, appDump, authDump);
     for (const archive of [appDump, authDump]) {
       await ensureNonEmptyFile(archive);
       await runner.run('pg_restore', ['--list', archive]);
     }
-    await runner.run('age', [
-      '--recipient',
-      config.ageRecipient,
-      '--output',
-      appEncrypted,
-      appDump,
-    ]);
-    await unlink(appDump);
-    await runner.run('age', [
-      '--recipient',
-      config.ageRecipient,
-      '--output',
-      authEncrypted,
-      authDump,
-    ]);
-    await unlink(authDump);
+    const appArchive = await sealArchive(runner, appDump, config.ageRecipient);
+    const authArchive = await sealArchive(runner, authDump, config.ageRecipient);
     const [appSha256, authSha256, appBytes, authBytes] = await Promise.all([
-      sha256File(appEncrypted),
-      sha256File(authEncrypted),
-      stat(appEncrypted).then((file) => file.size),
-      stat(authEncrypted).then((file) => file.size),
+      sha256File(appArchive),
+      sha256File(authArchive),
+      stat(appArchive).then((file) => file.size),
+      stat(authArchive).then((file) => file.size),
     ]);
     const manifest: BackupManifest = {
       formatVersion: 2,
       ...metadata,
       createdAt: createdAt.toISOString(),
+      encryption: encrypted ? 'age' : 'none',
       environment: config.prefix.split('/')[0] || 'default',
       appObjectKey: keys.app,
       appChecksumObjectKey: keys.appChecksum,
@@ -88,8 +106,8 @@ export async function backupWithConfig(
       authTables: [...authTables],
       cliVersion: packageJson.version,
     };
-    await store.putImmutable(keys.app, { file: appEncrypted });
-    await store.putImmutable(keys.auth, { file: authEncrypted });
+    await store.putImmutable(keys.app, { file: appArchive });
+    await store.putImmutable(keys.auth, { file: authArchive });
     await store.putImmutable(
       keys.appChecksum,
       Buffer.from(`${appSha256}  ${keys.app.split('/').at(-1)}\n`),

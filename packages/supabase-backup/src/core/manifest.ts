@@ -26,11 +26,22 @@ export interface TableCount {
   count: number;
 }
 
+/**
+ * How the stored archives are protected.
+ *
+ * Absent means `age`, which is what every backup written before the option
+ * existed is, so an older manifest still says what a restore needs to know.
+ */
+export type BackupEncryption = 'age' | 'none';
+
+export const backupEncryptions = ['age', 'none'] as const;
+
 export interface BackupManifest {
   formatVersion: 2;
   accessChecks?: AccessChecks;
   appAccessFingerprint: string;
   appChecksumObjectKey: string;
+  /** Size of the stored archive, which is the plaintext dump when unencrypted. */
   appEncryptedBytes: number;
   appObjectKey: string;
   appSchemas: string[];
@@ -45,6 +56,8 @@ export interface BackupManifest {
   authTables: AuthTable[];
   cliVersion: string;
   createdAt: string;
+  /** What protects the archives. Unset on backups written before the option. */
+  encryption?: BackupEncryption;
   environment: string;
   /** Extensions the source database had, so a restore can require them first. */
   extensions?: string[];
@@ -60,19 +73,27 @@ export const backupKeyLayoutVersion = 'v1';
 /** Names the manifest inside every backup folder. */
 export const manifestObjectName = 'manifest.json';
 
-/** Generates immutable object names for one UTC backup timestamp. */
+/**
+ * Generates immutable object names for one UTC backup timestamp.
+ *
+ * The `.age` suffix is part of the name only when the archive really is an age
+ * file. A plaintext dump that borrowed the suffix would invite someone to trust
+ * it as encrypted, or to feed it to `age --decrypt` and be told nothing useful.
+ */
 export function backupObjectKeys(
   prefix: string,
   createdAt: Date,
+  encrypted = true,
 ): Record<'app' | 'auth' | 'appChecksum' | 'authChecksum' | 'manifest', string> {
   const stamp = createdAt
     .toISOString()
     .replace(/[-:]/gu, '')
     .replace(/\.\d{3}Z$/u, 'Z');
   const base = `${prefix}/${backupKeyLayoutVersion}/${stamp}`;
+  const suffix = encrypted ? '.age' : '';
   return {
-    app: `${base}/app.dump.age`,
-    auth: `${base}/auth.dump.age`,
+    app: `${base}/app.dump${suffix}`,
+    auth: `${base}/auth.dump${suffix}`,
     appChecksum: `${base}/app.sha256`,
     authChecksum: `${base}/auth.sha256`,
     manifest: `${base}/${manifestObjectName}`,
@@ -100,6 +121,7 @@ export function parseManifest(value: string): BackupManifest {
   if (
     item.formatVersion !== 2 ||
     (item.accessChecks !== undefined && !isAccessChecks(item.accessChecks)) ||
+    (item.encryption !== undefined && !backupEncryptions.includes(item.encryption)) ||
     !isText(item.appAccessFingerprint) ||
     !/^[a-f0-9]{32}$/u.test(item.appAccessFingerprint || '') ||
     !isText(item.createdAt) ||

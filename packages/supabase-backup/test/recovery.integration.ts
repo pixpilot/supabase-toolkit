@@ -133,7 +133,7 @@ describe('PostgreSQL recovery safety', () => {
       'Downloading application and Auth archives and verifying checksums...',
       'Decrypting application archive...',
       'Decrypting Auth archive...',
-      'Checking decrypted archives can be read...',
+      'Checking archives can be read...',
       'Connecting to restore target',
       'Checking target Auth table compatibility...',
       'Checking target Auth tables are empty...',
@@ -579,5 +579,92 @@ describe('PostgreSQL recovery safety', () => {
     expect([...store.values.keys()].some((key) => key.endsWith('manifest.json'))).toBe(
       false,
     );
+  });
+
+  /*
+   * The unencrypted path, end to end, against the same real PostgreSQL.
+   *
+   * age is not substituted here but forbidden outright, so a backup that
+   * quietly encrypted anyway, or a restore that tried to decrypt, fails rather
+   * than passing on a stub that happens to copy the file either way.
+   */
+  it('backs up and restores without encryption, never running age', async () => {
+    const source = await server.create(sourceSchema);
+    const target = await server.create(authSchema);
+    const store = new MemoryStore();
+    const prefix = randomUUID();
+    const storage = {
+      R2_ACCESS_KEY_ID: 'test',
+      R2_SECRET_ACCESS_KEY: 'test',
+      R2_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
+      R2_BUCKET: 'test-backups',
+    };
+    const withoutAge: ProgramRunner = {
+      async run(program, args, options) {
+        if (program === 'age')
+          throw new Error('age ran for a backup that asked for no encryption');
+        return systemRunner.run(program, args, options);
+      },
+    };
+    const manifest = await backupWithConfig(
+      {
+        sourceDatabaseUrl: source.url,
+        encryption: 'none',
+        appSchemas: ['public'],
+        excludedSchemas: [],
+        prefix,
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+        bucket: 'test-backups',
+        endpoint: 'https://test.r2.cloudflarestorage.com',
+      },
+      { runner: withoutAge, store },
+    );
+    const keys = backupObjectKeys(prefix, new Date(manifest.createdAt), false);
+    expect(manifest.encryption).toBe('none');
+    expect(manifest.appObjectKey).toBe(keys.app);
+    expect(keys.app.endsWith('.age')).toBe(false);
+    // What landed in the store is a pg_dump custom archive, which starts PGDMP.
+    expect(
+      Buffer.from(store.values.get(keys.app) ?? new Uint8Array())
+        .subarray(0, 5)
+        .toString('utf8'),
+    ).toBe('PGDMP');
+    // status needs no key for either kind of backup, and still verifies bytes.
+    await expect(getBackupStatus(prefix, store)).resolves.toMatchObject({
+      manifestKey: keys.manifest,
+    });
+    await restore(
+      { apply: true, confirmTarget: target.confirmTarget, key: keys.manifest },
+      { TARGET_DATABASE_URL: target.url, BACKUP_ENCRYPTION: 'none', ...storage },
+      { store, runner: withoutAge },
+    );
+    expect(
+      (await target.db.query('SELECT count(*)::int AS count FROM auth.users')).rows,
+    ).toEqual([{ count: 1 }]);
+    expect((await target.db.query('SELECT email FROM public.profiles')).rows).toEqual([
+      { email: 'old@example.test' },
+    ]);
+    expect(
+      (await target.db.query('SELECT payload FROM public.records')).rows,
+    ).toHaveLength(1);
+  });
+
+  it('refuses to read an encrypted backup as though it were plaintext', async () => {
+    const f = await fixture();
+    await expect(
+      restore(
+        { apply: false, key: f.key },
+        {
+          BACKUP_ENCRYPTION: 'none',
+          R2_ACCESS_KEY_ID: 'test',
+          R2_SECRET_ACCESS_KEY: 'test',
+          R2_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
+          R2_BUCKET: 'test-backups',
+        },
+        { store: f.store, runner },
+      ),
+    ).rejects.toThrow('is encrypted, so --age-identity is required');
+    await f.expectEmpty();
   });
 });

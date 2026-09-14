@@ -34,9 +34,20 @@ export {
   type TextPromptOptions,
 } from './cli/prompt.js';
 export type { AccessChecks } from './core/access-checks.js';
-export { loadBackupConfig, loadRestoreConfig, loadStatusConfig } from './core/config.js';
+export {
+  encryptionDisabled,
+  encryptionOff,
+  loadBackupConfig,
+  loadRestoreConfig,
+  loadStatusConfig,
+} from './core/config.js';
 export { BackupError } from './core/errors.js';
-export { type BackupManifest, backupObjectKeys, parseManifest } from './core/manifest.js';
+export {
+  type BackupEncryption,
+  type BackupManifest,
+  backupObjectKeys,
+  parseManifest,
+} from './core/manifest.js';
 export {
   isManagedSchema,
   isSystemSchema,

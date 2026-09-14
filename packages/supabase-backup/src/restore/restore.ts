@@ -228,6 +228,27 @@ export async function restore(
   const manifest = parseManifest(
     Buffer.from(await store.get(options.key)).toString('utf8'),
   );
+  /*
+   * The backup itself says whether it is encrypted, and the flags only say what
+   * this run came prepared for. A run told to expect plaintext still refuses to
+   * guess at an encrypted archive, and an identity supplied for a backup that
+   * turns out to be plaintext is simply not needed.
+   */
+  const encrypted = manifest.encryption !== 'none';
+  if (encrypted && config.ageIdentity === undefined)
+    throw new BackupError(
+      `Backup '${options.key}' is encrypted, so --age-identity is required to read it. Drop --no-encryption and pass the identity.`,
+    );
+  const decryptWith = encrypted ? config.ageIdentity : undefined;
+  /*
+   * Said whichever way the run arrived, because the manifest is the only thing
+   * that knows: an operator who believed these backups were encrypted learns it
+   * here rather than from the bucket.
+   */
+  if (!encrypted)
+    process.stderr.write(
+      `Backup '${options.key}' is not encrypted: it is stored as a plaintext database dump, readable by anyone who can read the backup storage.\n`,
+    );
   logRestoreProgress('Checking PostgreSQL tool compatibility...');
   await ensureRestoreToolSupportsArchive(runner, manifest.pgDumpVersion);
   const target = config.targetDatabaseUrl
@@ -254,40 +275,44 @@ export async function restore(
     logRestoreProgress(
       'Downloading application and Auth archives and verifying checksums...',
     );
+    // An unencrypted backup holds the dumps themselves, so they are written
+    // straight to where the restore reads them from rather than to a .age file.
     await readVerifiedArchives(manifest, store, {
-      app: appEncrypted,
-      auth: authEncrypted,
+      app: decryptWith === undefined ? appDump : appEncrypted,
+      auth: decryptWith === undefined ? authDump : authEncrypted,
     });
     logRestoreProgress(
       'Archive checksums verified. Preparing temporary restore files...',
     );
-    await writePrivateFile(identity, `${config.ageIdentity}\n`);
-    logRestoreProgress('Decrypting application archive...');
-    await runner.run('age', [
-      '--decrypt',
-      '--identity',
-      identity,
-      '--output',
-      appDump,
-      appEncrypted,
-    ]);
-    logRestoreProgress('Decrypting Auth archive...');
-    await runner.run('age', [
-      '--decrypt',
-      '--identity',
-      identity,
-      '--output',
-      authDump,
-      authEncrypted,
-    ]);
-    logRestoreProgress('Checking decrypted archives can be read...');
+    if (decryptWith !== undefined) {
+      await writePrivateFile(identity, `${decryptWith}\n`);
+      logRestoreProgress('Decrypting application archive...');
+      await runner.run('age', [
+        '--decrypt',
+        '--identity',
+        identity,
+        '--output',
+        appDump,
+        appEncrypted,
+      ]);
+      logRestoreProgress('Decrypting Auth archive...');
+      await runner.run('age', [
+        '--decrypt',
+        '--identity',
+        identity,
+        '--output',
+        authDump,
+        authEncrypted,
+      ]);
+    }
+    logRestoreProgress('Checking archives can be read...');
     for (const archive of [appDump, authDump]) {
       await ensureNonEmptyFile(archive);
       await runner.run('pg_restore', ['--list', archive]);
     }
     if (!target) {
       process.stdout.write(
-        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; managed tables ${[...manifest.authTables, ...(manifest.storageTables ?? [])].join(', ')}. The archive is intact and decrypts. Pass --target-database-url to also check that a database can accept it.\n`,
+        `Restore plan (no changes): manifest ${options.key}; app schemas ${manifest.appSchemas.join(', ')}; managed tables ${[...manifest.authTables, ...(manifest.storageTables ?? [])].join(', ')}. The archive is intact and ${decryptWith === undefined ? 'reads' : 'decrypts'}. Pass --target-database-url to also check that a database can accept it.\n`,
       );
       return manifest;
     }

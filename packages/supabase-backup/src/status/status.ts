@@ -70,7 +70,7 @@ export async function status(
       `Latest backup is ${result.ageHours.toFixed(1)} hours old, exceeding ${maxAgeHours} hours.`,
     );
   process.stdout.write(
-    `Backup encrypted archive integrity verified: ${result.manifest.createdAt} (${result.ageHours.toFixed(1)} hours old)\nManifest: ${result.manifestKey}\n`,
+    `Backup ${result.manifest.encryption === 'none' ? '' : 'encrypted '}archive integrity verified: ${result.manifest.createdAt} (${result.ageHours.toFixed(1)} hours old)\nManifest: ${result.manifestKey}\n`,
   );
   return result;
 }

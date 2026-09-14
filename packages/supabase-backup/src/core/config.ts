@@ -16,17 +16,21 @@ import {
  * or anything else specific to one of them.
  */
 
+/** Backup settings require a recipient unless plaintext is explicitly selected. */
 export type BackupConfig = StorageConfig & {
-  ageRecipient: string;
   /** Schemas to dump whole. Unset backs up every schema the project owns. */
   appSchemas?: string[];
   excludedSchemas: string[];
   prefix: string;
   sourceDatabaseUrl: string;
-};
+} & (
+    | { ageRecipient: string; encryption?: 'age' }
+    | { ageRecipient?: never; encryption: 'none' }
+  );
 
 export type RestoreConfig = StorageConfig & {
-  ageIdentity: string;
+  /** Identity the archives are decrypted with; unset only when a run opted out. */
+  ageIdentity?: string;
   sourceDatabaseUrl?: string;
   targetDatabaseUrl?: string;
 };
@@ -34,6 +38,26 @@ export type RestoreConfig = StorageConfig & {
 export type StatusConfig = StorageConfig & {
   prefix: string;
 };
+
+/** The only value BACKUP_ENCRYPTION accepts, which turns encryption off. */
+export const encryptionOff = 'none';
+
+/**
+ * Says whether a run deliberately opted out of encrypting its archives.
+ *
+ * Encryption is what a backup is for, so it stays on unless this reads the exact
+ * opt-out word: a value that is empty, misspelt, or anything else is refused
+ * rather than quietly taken as permission to store a plaintext database dump.
+ */
+export function encryptionDisabled(env: NodeJS.ProcessEnv): boolean {
+  const value = env['BACKUP_ENCRYPTION']?.trim();
+  if (value === undefined || value === '') return false;
+  if (value !== encryptionOff)
+    throw new BackupError(
+      `BACKUP_ENCRYPTION must be '${encryptionOff}' when it is set at all. Leave it unset to encrypt, which is the default.`,
+    );
+  return true;
+}
 
 /** Reads, normalises, and validates an object-key prefix. */
 function backupPrefix(env: NodeJS.ProcessEnv): string {
@@ -46,11 +70,16 @@ function backupPrefix(env: NodeJS.ProcessEnv): string {
 export function loadBackupConfig(env = process.env): BackupConfig {
   const named = env['APP_SCHEMAS']?.trim();
   const excluded = env['EXCLUDE_SCHEMAS']?.trim();
-  const ageRecipient = required(env, 'BACKUP_AGE_RECIPIENT');
-  ensureValidAgeRecipient(ageRecipient);
+  const unencrypted = encryptionDisabled(env);
+  if (unencrypted && env['BACKUP_AGE_RECIPIENT']?.trim())
+    throw new BackupError(
+      'BACKUP_ENCRYPTION: none cannot be combined with BACKUP_AGE_RECIPIENT.',
+    );
+  const ageRecipient = unencrypted ? undefined : required(env, 'BACKUP_AGE_RECIPIENT');
+  if (ageRecipient !== undefined) ensureValidAgeRecipient(ageRecipient);
   return {
     ...loadStorageConfig(env),
-    ageRecipient,
+    ...(ageRecipient === undefined ? { encryption: 'none' as const } : { ageRecipient }),
     sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL'),
     prefix: backupPrefix(env),
     ...(named ? { appSchemas: parseAppSchemas(named) } : {}),
@@ -66,11 +95,22 @@ export function loadRestoreConfig(
   const targetDatabaseUrl = env['TARGET_DATABASE_URL']?.trim();
   if (requireTarget && !targetDatabaseUrl)
     throw new BackupError('TARGET_DATABASE_URL is required with --apply.');
-  const ageIdentity = required(env, 'AGE_IDENTITY');
-  ensureValidAgeIdentity(ageIdentity);
+  /*
+   * A run that did not opt out still needs the identity here rather than once
+   * the manifest has been read, so forgetting the flag fails before anything is
+   * downloaded. Whether the backup actually needs decrypting is the manifest's
+   * to say, and the restore checks it against what this loaded.
+   */
+  const unencrypted = encryptionDisabled(env);
+  if (unencrypted && env['AGE_IDENTITY']?.trim())
+    throw new BackupError(
+      'BACKUP_ENCRYPTION: none cannot be combined with AGE_IDENTITY.',
+    );
+  const ageIdentity = unencrypted ? undefined : required(env, 'AGE_IDENTITY');
+  if (ageIdentity !== undefined) ensureValidAgeIdentity(ageIdentity);
   return {
     ...loadStorageConfig(env),
-    ageIdentity,
+    ...(ageIdentity === undefined ? {} : { ageIdentity }),
     ...(targetDatabaseUrl ? { targetDatabaseUrl } : {}),
     ...(env['SOURCE_DATABASE_URL']?.trim()
       ? { sourceDatabaseUrl: required(env, 'SOURCE_DATABASE_URL') }

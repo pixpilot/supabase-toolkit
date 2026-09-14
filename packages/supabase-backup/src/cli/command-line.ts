@@ -3,7 +3,7 @@ import type { InputValues } from './interactive.js';
 import type { Prompter, PromptStreams } from './prompt.js';
 import packageJson from '../../package.json' with { type: 'json' };
 import { backup } from '../backup/backup.js';
-import { loadStatusConfig } from '../core/config.js';
+import { encryptionOff, loadStatusConfig } from '../core/config.js';
 import { BackupError } from '../core/errors.js';
 import { ensureValidManifestKey } from '../core/validation.js';
 import { restore } from '../restore/restore.js';
@@ -53,6 +53,7 @@ const switchOptions = new Set([
   '--apply',
   '--no-input',
   '--no-access-checks',
+  '--no-encryption',
   '--help',
   '-h',
   '--version',
@@ -113,6 +114,10 @@ Command options:
   --apply                       Write to the target database.
   --no-access-checks             Skip advisory default-grant and role-membership
                                 checks after restore (enabled by default).
+  --no-encryption               Store the dumps as they are, with no encryption.
+                                A backup is always encrypted unless this is
+                                passed; on restore it says the backup being read
+                                was taken this way, so no identity is asked for.
   --confirm-target <ref>        Typed confirmation: the Supabase project ref,
                                 or '<host>:<port>/<database>' elsewhere.
   --no-input                    Never ask; fail when a value is missing.
@@ -129,6 +134,11 @@ Left alone, a backup takes every schema the project owns, including ones added
 later. PostgreSQL's catalogs and the schemas Supabase defines are left out;
 the rows of auth.users, auth.identities, storage.buckets, and storage.objects
 are backed up on their own, and supabase_migrations is kept whole.
+
+An archive is encrypted to --age-recipient, and --no-encryption is the only way
+to get a backup that is not: the dumps are then stored exactly as pg_dump wrote
+them, readable by anyone who can read the backup storage. Each backup records
+which of the two it is, so a restore reads it correctly either way.
 
 The environment is never read. Anything not passed is asked for when the session
 is a terminal, so a missing --key offers the newest backups to choose from. A
@@ -164,6 +174,18 @@ export function parseArguments(args: readonly string[]): CliArguments {
   }
   if (switches.has('--no-access-checks') && command !== 'restore')
     throw new BackupError('--no-access-checks is only supported for restore.');
+  /*
+   * Turning encryption off and naming a key are contradictory instructions, and
+   * which one was meant cannot be guessed. Saying so is the difference between a
+   * typo and a database dump stored in the open.
+   */
+  if (switches.has('--no-encryption')) {
+    if (command !== 'backup' && command !== 'restore')
+      throw new BackupError('--no-encryption is only supported for backup and restore.');
+    const key = command === 'backup' ? '--age-recipient' : '--age-identity';
+    if (values.has(key))
+      throw new BackupError(`--no-encryption cannot be combined with ${key}.`);
+  }
   return { command, values, switches };
 }
 
@@ -225,7 +247,10 @@ async function planRestore(
     key = await chooseManifestKey(config.prefix, store, prompter);
   }
   ensureValidManifestKey(key);
-  values = await fillMissingInput([ageIdentityField], values, prompter);
+  // A run reading a backup taken with --no-encryption has no use for an
+  // identity; the restore still refuses to go on if the manifest disagrees.
+  if (!parsed.switches.has('--no-encryption'))
+    values = await fillMissingInput([ageIdentityField], values, prompter);
   /*
    * Someone sitting at the prompt came here to restore, so they are asked for a
    * target and made to confirm it, rather than asked whether they meant it. An
@@ -266,11 +291,20 @@ export async function planCommand(
   const command =
     parsed.command || (prompter ? await chooseCommand(prompter) : parsed.command);
   const driver = await resolveStorageDriver(inputFromArguments(parsed), prompter);
-  // The chosen backend travels with the values, so loading the config later
-  // reads the settings of the backend this run actually selected.
-  const given: InputValues = { ...inputFromArguments(parsed), STORAGE_DRIVER: driver };
+  const encrypt = !parsed.switches.has('--no-encryption');
+  // The chosen backend and the encryption decision travel with the values, so
+  // loading the config later reads what this run actually selected.
+  const given: InputValues = {
+    ...inputFromArguments(parsed),
+    STORAGE_DRIVER: driver,
+    ...(encrypt ? {} : { BACKUP_ENCRYPTION: encryptionOff }),
+  };
   if (command === 'backup') {
-    const values = await fillMissingInput(backupFieldsFor(driver), given, prompter);
+    const values = await fillMissingInput(
+      backupFieldsFor(driver, encrypt),
+      given,
+      prompter,
+    );
     return async () => backup(values);
   }
   if (command === 'status') {

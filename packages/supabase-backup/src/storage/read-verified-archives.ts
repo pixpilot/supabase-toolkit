@@ -59,7 +59,7 @@ export async function readVerifiedArchives(
           }),
     );
     if (size !== bytes || digest.digest('hex') !== expected || checksum !== expected)
-      throw new BackupError('Encrypted archive checksum verification failed.');
+      throw new BackupError('Backup archive checksum verification failed.');
   };
   await Promise.all([
     read(
